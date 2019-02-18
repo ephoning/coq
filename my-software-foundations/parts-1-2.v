@@ -104,5 +104,60 @@ Example trans_eq_example' : forall (a b c d e f : nat),
     [a;b] = [e;f].
 Proof.
   intros a b c d e f eq1 eq2.
-  apply eq1 with .    (* <--- continue here *)
+  (* apply tran_eq.  *)    (* this does not work as it does not instantiate 'm' in trans_eq *)
+
+  (* alternative 1: "manually" instantiate the correct value to 'm' *)
+  apply tran_eq with (m := [c;d]).
+  apply eq1.
+  apply eq2.
+
+  (* alternative 2: 'eapply'; his leaves 'm' uninstantiated; TBD *)
+  (*eapply tran_eq. *)
+Qed.
+
+
+(* inversion tactic *)
+
+(* remember:
+Inductive nat : Type :=
+| O : nat
+| S : nat -> nat.
+ *)
+
+Lemma pred_nat': forall n : nat,
+    n = pred (S n).
+Proof.
+  intro n.
+  destruct n.
+  - simpl.
+    reflexivity.
+  - simpl.
+    reflexivity.
+Qed.
+
+
+(* alternative 1: 'manually' *)
+Theorem S_injective: forall (n m : nat),
+    S n = S m -> n = m.
+Proof.
+  intros n m H1.
+  assert (H2: n = pred (S n)). (* note this sets us up for 'peeing off' an 'S' application *)
+  - simpl.       (* proving the subgoal introduced by the 'assert' *)
+    reflexivity.
+  - rewrite H2.
+    rewrite H1.
+    simpl.
+    reflexivity.
+Qed.
+
+(* alternative 2: using lemma pre_nat' *)
+Theorem S_injective': forall (n m : nat),
+    S n = S m -> n = m.
+Proof.
+  intros n m H1.
+  rewrite pred_nat'.
+  rewrite <- H1.
+  apply pred_nat'.
+Qed.
+
 
