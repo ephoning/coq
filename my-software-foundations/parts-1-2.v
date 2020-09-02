@@ -160,4 +160,14 @@ Proof.
   apply pred_nat'.
 Qed.
 
+(* alternative 3: inversion' *)
+Theorem S_injective'': forall (n m : nat),
+    S n = S m -> n = m.
+Proof.
+  intros n m H.
+  inversion H.
+  reflexivity.
+Qed.
+
+
 

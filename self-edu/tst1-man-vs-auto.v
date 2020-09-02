@@ -1,5 +1,5 @@
 (* by hand *)
-Require Import utf8.
+Require Import Utf8.
 Variables A B C : Prop.
 Goal A → (A → B) → B.
 intro H.
@@ -7,7 +7,7 @@ intro H'.
 apply H'.
 apply H.
 Show Proof.
-Show Tree.
+(* Show Tree. *)
 Qed.
 
 Theorem e1: ∀ A B : Prop,  A → (A → B) → B.
@@ -21,9 +21,9 @@ Show Proof.
     B0  <-> B
     H   <-> H
     H0 <-> H'
-    '=> H0 H' <-> apply H'. apply H. 
+    '=> H0 H' <-> apply H'. apply H.
 *)
-Show Tree.
+(*Show Tree.*)
 Qed.
 
 Inspect 2.

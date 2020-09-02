@@ -40,7 +40,9 @@ Fixpoint append (ls1 ls2 : list) {struct ls1} : list :=
   end.
 
 
+(*
 induction ls1;
 simpl; intros.
 
  trivial.
+*)
