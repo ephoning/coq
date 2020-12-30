@@ -1,5 +1,5 @@
 (*Require Import Utf8.*)
-Require Import Bool Arith List Cpdt.CpdtTactics.
+Require Import Bool Arith List Cpdt.CpdtTactics. 
 Set Implicit Arguments.
 Set Asymmetric Patterns.
 
@@ -13,7 +13,7 @@ Definition binopDenote (b : binop) : nat -> nat -> nat :=
   | Plus => plus
   | Times => mult
   end.
-
+                                                     
 Definition expDenote (e : exp) : nat := 42.
 
 Inductive

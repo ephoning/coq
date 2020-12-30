@@ -4,4 +4,8 @@ Lemma or_commutative:  A \/ B -> B \/ A.
 tauto.
 Qed.
 (* show constructed proof tree; see tutorial page 15 for some explanation *)
-Print or_commutative. 
+Print or_commutative.
+
+Print or_ind.
+Print or_introl.
+Print or_intror.
