@@ -1,0 +1,1498 @@
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\chapter{Views and Boolean Reflection}
+\label{ch:boolrefl}
+
+
+
+
+
+
+In Chapter~\ref{ch:eqrew}, we have seen how custom rewriting rules
+and truth tables can be encoded in Coq using its support for indexed
+datatype families, so they are of great help for constructing the
+proofs by case analysis and rewriting. In this chapter, we will show
+how the custom rewriting machinery can be taken to the whole new level
+and be used to facilitate the reasoning about \textit{computable} properties
+and predicates. We will consider a series of insights that lead to the
+idea of the \textit{small-scale reflection}, the heart of the Ssreflect
+\index{small-scale reflection|textbf} \index{reflection|see
+{small-scale reflection}} framework, which blurs the boundaries
+between computable predicates defined in the sort \coqdockw{Prop} (see
+Chapter~\ref{ch:logic}) and Coq's recursive functions returning a
+result of type \coqdocinductive{bool} (in the spirit of the definitions that we have
+seen in Chapter~\ref{ch:funprog}). That said, in the vast number of
+cases these two are just the sides of the same coin and, hence, should
+be treated uniformly, serving to facilitate the reasoning in two
+different directions: \index{reflection|see {small-scale
+reflection}}
+
+
+
+\begin{itemize}
+\item  expressing quantifications and building the proofs by means of
+  \textit{constructive reasoning} with logical connectives as datatypes
+  defined in the sort \coqdockw{Prop};
+
+
+
+\item  employing brute-force computations for quantifier-free goals within
+  the Coq framework itself, taken as a programming language, in order
+  to reduce the goals to be proved by means of simply \textit{computing}
+  them.
+
+\end{itemize}
+
+
+We will elaborate more on the differences between predicates stated by
+means of \coqdockw{Prop} and \coqdocinductive{bool} in Section~\ref{sec:propbool}. The term
+\textit{small-scale reflection}, which gives the name to the whole framework
+of Ssreflect, emphasizes the two complementary ways of building
+proofs: by means of intuitionistic inference (i.e., using the
+constructors of datatypes defined in \coqdockw{Prop}) and by means of mere
+computation (i.e., with \coqdocinductive{bool}-returning function). These two ways,
+therefore, serve as each other's ``reflections'' and, moreover, both are
+implemented within the same system, without the need to appeal to
+Coq's meta-object protocol,\footnote{In contrast, reflection
+mechanism in Java, Python or Ruby actually does appeal to the
+meta-object protocol, e.g., \index{meta-object protocol} the structure
+of the classes, which lies beyond the formally defined semantics of
+the language itself and, hence, allows one to modify the program's
+behaviour at runtime.} which makes this reflection \textit{small-scale}.
+
+
+Unfortunately, the proper explanation of the implementation of the
+reflection mechanism between \coqdockw{Prop} and \coqdocinductive{bool} in Ssreflect strongly
+relies on the \textit{views} machinery, so let us begin by describing it
+first.
+
+
+\newpage
+
+
+\section{Proving with views in Ssreflect}
+
+
+\label{sec:views}\index{views|textbf}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{\textsf{{From}}} \coqdocvar{mathcomp}\coqdoceol
+\coqdocnoindent
+\coqdockw{Require} \coqdockw{Import} \coqdocvar{ssreflect} \coqdocvar{ssrnat} \coqdocvar{prime} \coqdocvar{ssrbool} \coqdocvar{eqtype}.\coqdoceol
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Let us assume we have the following implication to prove:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{imp\_trans4} \coqdocvar{P} \coqdocvar{Q} \coqdocvar{$R$} \coqdocvar{S}: (\coqdocvar{P} \ensuremath{\rightarrow} \coqdocvar{Q}) \ensuremath{\rightarrow} (\coqdocvar{$R$} \ensuremath{\rightarrow} \coqdocvar{S}) \ensuremath{\rightarrow} (\coqdocvar{Q} \ensuremath{\rightarrow} \coqdocvar{$R$}) \ensuremath{\rightarrow} \coqdocvar{P} \ensuremath{\rightarrow} \coqdocvar{S}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow}\coqdocvar{H1} \coqdocvar{H2} \coqdocvar{H3}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{P} : \coqdockw{Type}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocdefinition{Q} : \coqdockw{Type}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{$R$} : \coqdockw{Type}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocaxiom{S} : \coqdockw{Type}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H1} : \coqdocvariable{P} \ensuremath{\rightarrow} \coqdocdefinition{Q}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H2} : \coqdocvariable{$R$} \ensuremath{\rightarrow} \coqdocaxiom{S}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H3} : \coqdocdefinition{Q} \ensuremath{\rightarrow} \coqdocvariable{$R$}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocvariable{P} \ensuremath{\rightarrow} \coqdocaxiom{S}
+
+\coqdocemptyline
+
+
+Since we are proficient in the proofs via implications, it is not
+difficult to construct the explicit proof term by a series of \coqdoctac{apply}:
+tactic calls or via the \coqdoctac{exact}: tactic, as it has been show in
+Chapter~\ref{ch:logic}. Let us do something different, though,
+namely \textit{weaken} the top assumption of the goal by means of applying
+the hypothesis \coqdocvar{H1} to it, so the overall goal will become \coqdocdefinition{Q} \ensuremath{\rightarrow} \coqdocaxiom{S}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow}\coqdocvar{p}; \coqdoctac{move}: (\coqdocvar{H1} \coqdocvar{p}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+This proof pattern of ``switching the view'' turns out to be so frequent
+that Ssreflect introduces a special \textit{view} tactical \texttt{/} for
+it, which is typically combined with the standard \coqdoctac{move} or \coqdoctac{case}
+tactics. In particular, the last proof line could be replaced by the
+following:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Undo}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}/\coqdocvar{H1}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+...\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H1} : \coqdocvariable{P} \ensuremath{\rightarrow} \coqdocdefinition{Q}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H2} : \coqdocvariable{$R$} \ensuremath{\rightarrow} \coqdocaxiom{S}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H3} : \coqdocdefinition{Q} \ensuremath{\rightarrow} \coqdocvariable{$R$}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocdefinition{Q} \ensuremath{\rightarrow} \coqdocaxiom{S}
+
+\coqdocemptyline
+
+
+The assumption \coqdocvar{H1} used for weakening is usually referred to as a
+\index{view lemma} \textit{view lemma}. The spaces before and after
+\texttt{/} are optional. One can also \textit{chain} the views into one
+series, so the current proof can be completed as follows:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{move}/\coqdocvar{H3} /\coqdocvar{H2}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\subsection{Combining views and bookkeeping}
+
+
+
+
+The view tactical can be also combined with the standard bookkeeping
+machinery, so it will apply the specified view lemma to the
+corresponding assumption of the goal, as demonstrated by the following
+proof script, which use the partially-applied assumption \coqdocaxiom{H} \coqdocvar{p} as a
+view lemma:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Goal} \coqdockw{\ensuremath{\forall}} \coqdocvar{P} \coqdocvar{Q} \coqdocvar{$R$}, \coqdocvar{P} \ensuremath{\rightarrow} (\coqdocvar{P} \ensuremath{\rightarrow} \coqdocvar{Q} \ensuremath{\rightarrow} \coqdocvar{$R$}) \ensuremath{\rightarrow} \coqdocvar{Q} \ensuremath{\rightarrow} \coqdocvar{$R$}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{move}\ensuremath{\Rightarrow}\coqdocvar{P} \coqdocvar{Q} \coqdocvar{$R$} \coqdocvar{p} \coqdocvar{H} /(\coqdocvar{H} \coqdocvar{p}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+In fact, this proof can be shortened even further by using the view
+notation for the \textit{top} assumption (denoted using the underscore):
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Undo}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow} \coqdocvar{P} \coqdocvar{Q} \coqdocvar{$R$} \coqdocvar{p}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{move}/(\coqdocvar{\_} \coqdocvar{p}).\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The last proof script first moved four assumptions to the context, so
+the goal became (\coqdocvariable{P} \ensuremath{\rightarrow} \coqdocdefinition{Q} \ensuremath{\rightarrow} \coqdocvariable{$R$}) \ensuremath{\rightarrow} \coqdocdefinition{Q} \ensuremath{\rightarrow} \coqdocvariable{$R$}. Next, it partially applied
+the top assumption (\coqdocvariable{P} \ensuremath{\rightarrow} \coqdocdefinition{Q} \ensuremath{\rightarrow} \coqdocvariable{$R$}) to \coqdocvar{p} : \coqdocvariable{P} from the context and
+moved the result back to the goal, so it became (\coqdocdefinition{Q} \ensuremath{\rightarrow} \coqdocvariable{$R$}) \ensuremath{\rightarrow} \coqdocdefinition{Q} \ensuremath{\rightarrow} \coqdocvariable{$R$},
+which is trivially provable.
+
+
+It is also possible to use views in combination with the \coqdoctac{case}
+tactics, which first performs the ``view switch'' via the view lemma
+provided and then case-analysed on the result, as demonstrated by the
+following proof script:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Goal} \coqdockw{\ensuremath{\forall}} \coqdocvar{P} \coqdocvar{Q} \coqdocvar{$R$}, (\coqdocvar{P} \ensuremath{\rightarrow} \coqdocvar{Q} \ensuremath{\land} \coqdocvar{$R$}) \ensuremath{\rightarrow} \coqdocvar{P} \ensuremath{\rightarrow} \coqdocvar{$R$}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow} \coqdocvar{P} \coqdocvar{Q} \coqdocvar{$R$} \coqdocvar{H}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{case}/\coqdocvar{H}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+What has happened is that the combined tactic \coqdoctac{case}/\coqdocaxiom{H} first switched
+the top assumption of the goal from \coqdocvariable{P} to \coqdocdefinition{Q} \ensuremath{\land} \coqdocvariable{$R$} and then
+case-analysed on it, which gave the proof of \coqdocvariable{$R$} right away, allowing
+us to conclude the proof.
+
+
+\subsection{Using views with equivalences}
+
+
+\label{seq:viewseq}
+
+
+So far we have explored only views that help to weaken the hypothesis
+using the view lemma, which is an implication. In fact, Ssreflect's
+view mechanism is elaborate enough to deal with view lemmas defined
+by means of equivalence (double implication) \texttt{<->}, and the
+system can figure out itself, ``in which direction'' the view lemma
+should be applied. Let us demonstrate it with the following example,
+which makes use of the hypothesis \coqdocaxiom{STequiv},\footnote{The Coq's
+command \texttt{Hypothesis} is a synonym for \texttt{Axiom} and
+\texttt{Variable}.\ccom{Hypothesis}\ccom{Variable}\ccom{Axiom}} whose
+nature is irrelevant for the illustration purposes:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Variables} \coqdocvar{S} \coqdocvar{T}: \coqdocvar{bool} \ensuremath{\rightarrow} \coqdockw{Prop}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Hypothesis} \coqdocvar{STequiv} : \coqdockw{\ensuremath{\forall}} \coqdocvar{a} \coqdocvar{b}, \coqdocvar{T} \coqdocvar{a} \ensuremath{\leftrightarrow} \coqdocvar{S} (\coqdocvar{a} || \coqdocvar{b}).\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{ST\_False} \coqdocvar{a} \coqdocvar{b}: (\coqdocvar{T} \coqdocvar{a} \ensuremath{\rightarrow} \coqdocvar{False}) \ensuremath{\rightarrow} \coqdocvar{S} (\coqdocvar{a} || \coqdocvar{b}) \ensuremath{\rightarrow} \coqdocvar{False}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{move}\ensuremath{\Rightarrow}\coqdocvar{H} /\coqdocvar{STequiv}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\subsection{Declaring view hints}
+
+
+
+
+In the example from Section~\ref{seq:viewseq}, we have seen how
+views can deal with equivalences. The mentioned elaboration, which
+helped the system to recognize, in which direction the double
+implication hypothesis \coqdocaxiom{STequiv} should have been used, is not
+hard-coded into Ssreflect. Instead, it is provided by a flexible
+mechanism of \index{view hints} \textit{view hints}, which allows one to
+specify view lemmas that should be applied \textit{implicitly} whenever it is
+necessary and can be figured out unambiguously.
+
+
+In the case of the proof of the \coqdoclemma{ST\_False} lemma the view hint \coqdoclemma{iffRL}
+from the included module \coqdoclibrary{ssreflect}\footnote{Implicit view hints are
+defined by means of \texttt{Hint View}\ccom{Hint View} command, added
+to Coq by Ssreflect. See the implementation of the module
+\coqdoclibrary{ssrbool}\ssrm{ssrbool} and Section 9.8 of the Reference
+Manual~\cite{Gontier-al:TR}.} \ssrm{ssreflect} has been ``fired'' in
+order to adapt the hypothesis \coqdocaxiom{STequiv}, so the adapted variant could
+be applied as a view lemma to the argument of type \coqdocaxiom{S} (\coqdocvariable{a} || \coqdocvariable{b}).
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{iffRL}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdoclemma{iffRL}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} \coqdocvariable{P} \coqdocdefinition{Q} : \coqdockw{Prop}, (\coqdocvariable{P} \ensuremath{\leftrightarrow} \coqdocdefinition{Q}) \ensuremath{\rightarrow} \coqdocdefinition{Q} \ensuremath{\rightarrow} \coqdocvariable{P}
+
+\coqdocemptyline
+
+
+The type of \coqdoclemma{iffRL} reveals that what it does is simply switching the
+equivalence to the implication, which works right-to-left, as captured
+by the name. Let us now redo the proof of the \coqdoclemma{ST\_False} lemma to see
+what is happening under the hood:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{ST\_False'} \coqdocvar{a} \coqdocvar{b}: (\coqdocvar{T} \coqdocvar{a} \ensuremath{\rightarrow} \coqdocvar{False}) \ensuremath{\rightarrow} \coqdocvar{S} (\coqdocvar{a} || \coqdocvar{b}) \ensuremath{\rightarrow} \coqdocvar{False}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow} \coqdocvar{H}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}/(\coqdocvar{iffRL} (\coqdocvar{STequiv} \coqdocvar{a} \coqdocvar{b})).\coqdoceol
+\coqdocnoindent
+\coqdocvar{\texttt{\emph{done}}}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The view switch on the second line of the proof is what has been done
+implicitly in the previous case: the implicit view \coqdoclemma{iffRL} has been
+applied to the call of \coqdocaxiom{STequiv}, which was in its turn supplied the
+necessary arguments \coqdocvariable{a} and \coqdocvariable{b}, inferred by the system from the goal,
+so the type of (\coqdocaxiom{STequiv} \coqdocvariable{a} \coqdocvariable{b}) would match the parameter type of
+\coqdoclemma{iffRL}, and the whole application would allow to make a view switch
+in the goal.  What is left behind the scenes is the rest of the
+attempts made by Coq/Ssreflect in its search for a suitable implicit
+view, which ended when the system has finally picked \coqdoclemma{iffRL}.
+
+
+In general, the design of powerful view hints is non-trivial, as they
+should capture precisely the situation when the ``view switch'' is
+absolutely necessary and the implicit views will not ``fire''
+spuriously. In the same time, implicit view hints is what allows for
+the smooth implementation of the boolean reflection, as we will
+discuss in Section~\ref{sec:reflect}.
+
+
+\subsection{Applying view lemmas to the goal}
+
+
+
+
+Similarly to how they are used for \textit{assumptions}, views can be used to
+interpret the goal by means of combining the Coq's standard \coqdoctac{apply}
+and \coqdoctac{exact} tactics with the view tactical~\texttt{/}. In the case
+if \coqdocaxiom{H} is a view lemma, which is just an implication \coqdocvariable{P} \ensuremath{\rightarrow} \coqdocdefinition{Q}, where
+\coqdocdefinition{Q} is the statement of the goal, the enhanced tactic \coqdoctac{apply}/ \coqdocaxiom{H} will
+work exactly as the standard Ssreflect's \coqdoctac{apply}:, that is, it will
+replace the goal \coqdocdefinition{Q} with \coqdocaxiom{H}'s assumption \coqdocvariable{P} to prove.
+
+
+However, interpreting goals via views turns out to be very beneficial
+in the presence of implicit view hints. For example, let us consider
+the following proposition to prove.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{TS\_neg}: \coqdockw{\ensuremath{\forall}} \coqdocvar{a}, \coqdocvar{T} (\coqdocvar{negb} \coqdocvar{a}) \ensuremath{\rightarrow} \coqdocvar{S} ((\coqdocvar{negb} \coqdocvar{a}) || \coqdocvar{a}).\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow}\coqdocvar{a} \coqdocvar{H}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{apply}/\coqdocvar{STequiv}.\coqdoceol
+\coqdocnoindent
+\coqdocvar{\texttt{\emph{done}}}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The view switch on the goal via \coqdoctac{apply}/\coqdocaxiom{STequiv} immediately changed
+the goal from \coqdocaxiom{S} ((\coqdocdefinition{negb} \coqdocvariable{a}) || \coqdocvariable{a}) to \coqdocaxiom{T} (\coqdocdefinition{negb} \coqdocvariable{a}), so the rest of the
+proof becomes trivial. Again, notice that the system managed to infer
+the right arguments for the \coqdocaxiom{STequiv} hypothesis by analysing the
+goal.
+
+
+Now, if we print the body of \coqdocdefinition{TS\_neg}, we will be able to see how an
+application of the implicit application of the view lemma \coqdocvar{iffLR} of
+type \coqdockw{\ensuremath{\forall}} \coqdocvariable{P} \coqdocdefinition{Q} : \coqdockw{Prop}, (\coqdocvariable{P} \ensuremath{\leftrightarrow} \coqdocdefinition{Q}) \ensuremath{\rightarrow} \coqdocvariable{P} \ensuremath{\rightarrow} \coqdocdefinition{Q} has been inserted,
+allowing for the construction of the proof term:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{TS\_neg}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{TS\_neg} = \coqdoceol
+\coqdocindent{1.00em}
+\coqdockw{fun} (\coqdocvariable{a} : \coqdocinductive{bool}) (\coqdocaxiom{H} : \coqdocaxiom{T} (\coqdocdefinition{negb} \coqdocvariable{a})) \ensuremath{\Rightarrow}\coqdoceol
+\coqdocindent{1.00em}
+(\coqdockw{fun} \coqdocvar{F} : \coqdocaxiom{T} (\coqdocdefinition{negb} \coqdocvariable{a}) \ensuremath{\Rightarrow}\coqdoceol
+\coqdocindent{2.50em}
+\coqdocvar{iffLR} (\coqdocdefinition{Q}:=\coqdocaxiom{S} (\coqdocdefinition{negb} \coqdocvariable{a} || \coqdocvariable{a})) (\coqdocaxiom{STequiv} (\coqdocdefinition{negb} \coqdocvariable{a}) \coqdocvariable{a}) \coqdocvar{F}) \coqdocaxiom{H}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} \coqdocvariable{a} : \coqdocinductive{bool}, \coqdocaxiom{T} (\coqdocdefinition{negb} \coqdocvariable{a}) \ensuremath{\rightarrow} \coqdocaxiom{S} (\coqdocdefinition{negb} \coqdocvariable{a} || \coqdocvariable{a})
+
+\coqdocemptyline
+
+
+
+
+\section{\texttt{Prop} versus \textbf{\textsf{bool}}}
+
+
+\label{sec:propbool}
+
+
+As we have already explored in the previous chapters, in CIC, the
+logical foundation of Coq, there is a number of important distinctions
+between logical propositions and boolean values.  In particular, there
+is an infinite number of ways to represent different propositions in
+the sort \coqdockw{Prop} by means of defining the datatypes. In contrast, the
+type \coqdocinductive{bool} is represented just by two values: \coqdocconstructor{true} and
+\coqdocconstructor{false}. Moreover, as it was discussed in Chapter~\ref{ch:logic}, in
+Coq only those propositions are considered to be \textit{true}, whose proof
+term can be constructed. And, of course, there is no such thing as a
+``proof term of \coqdocconstructor{true}'', as \coqdocconstructor{true} is simply a value.
+
+
+A more interesting question, though, is for which propositions \coqdocvariable{P}
+from the sort \coqdockw{Prop} the proofs can be computed \textit{automatically} by
+means of running a program, whose result will be an answer to the
+question ``Whether \coqdocvariable{P} holds?''. Therefore, such programs should always
+\textit{terminate} and, upon terminating, say ``true'' or ``false''. The
+propositions, for which a construction of such programs (even a very
+inefficient one) is possible, are referred to \index{decidability}
+as \textit{decidable} ones. Alas, as it was discussed in
+Section~\ref{sec:propsort} of Chapter~\ref{ch:logic}, quite a lot of
+interesting propositions are undecidable. Such properties include the
+classical halting problem \index{halting problem} (``Whether the
+program \coqdocvar{p} terminates or not?'') and any higher-order formulae, i.e.,
+such that contain quantifiers. For instance, it is not possible to
+implement a higher-order function, which would take two arbitrary
+functions $f_1$ and $f_2$ of type \coqdocinductive{nat} \ensuremath{\rightarrow} \coqdocinductive{nat} and return a boolean
+answer, which would indicate whether these two functions are equal
+(point-wise) or not, as it would amount to checking the result of the
+both function on each natural number, which, clearly, wouldn't
+terminate. Therefore, propositional equality of functions is a good
+example of a proposition, which is undecidable in general, so we
+cannot provide a terminating procedure for any values of its arguments
+(i.e., $f_1$ and $f_2$).
+
+
+However, the \textit{undecidability} of higher-order propositions (like the
+propositional equality of functions) does not make them \textit{non-provable}
+for particular cases, as we have clearly observed thorough the past
+few chapters. It usually takes a human intuition, though, to construct
+a proof of an undecidable proposition by means of combining a number
+of hypotheses (i.e., constructing a proof term), which is what one
+does when building a proof using tactics in Coq. For instance, if we
+have some extra insight about the two functions $f_1$ and $f_2$, which
+are checked for equality, we might be able to construct the proof of
+them being equal or not, in the similar ways as we have carried the
+proofs so far. Again, even if the functions are unknown upfront, it
+does not seem possible to implement an always-terminating procedure
+that would automatically decide whether they are equal or not.
+
+
+The above said does not mean that all possible propositions should be implemented as instances of \coqdockw{Prop}, making their clients to always construct their proofs, when it is necessary, since, fortunately, some propositions are \textit{decidable}, so it is possible to construct a decision procedure for them. A good example of such proposition is a predicate, which ensures that a number \coqdocvariable{n} is prime. Of course, in Coq one can easily encode primality of a natural number by means of the following inductive predicate, which ensures that \coqdocvariable{n} is prime if it is 1 or has no other natural divisors but 1 and \coqdocvariable{n} itself.
+
+
+\ssrd{isPrime}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{isPrime} \coqdocvar{n} : \coqdockw{Prop} :=\coqdoceol
+\coqdocindent{1.00em}
+\coqdockw{\ensuremath{\forall}} \coqdocvar{n1} \coqdocvar{n2}, \coqdocvar{n} = \coqdocvar{n1} \ensuremath{\times} \coqdocvar{n2} \ensuremath{\rightarrow} (\coqdocvar{n1} = 1 \ensuremath{\land} \coqdocvar{n2} = \coqdocvar{n}) \ensuremath{\lor} (\coqdocvar{n1} = \coqdocvar{n} \ensuremath{\land} \coqdocvar{n2} = 1).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Such definition, although correct, is quite inconvenient to use, as it
+does not provide a direct way to \textit{check} whether some particular
+number (e.g., 239) is prime or not. Instead, it requires one to
+construct a proof of primality for \textit{each} particular case using the
+constructors (or the contradiction, which would imply that the number
+is not prime). As it's well known, there is a terminating procedure to
+compute whether the number is prime or not by means of \textit{enumerating}
+all potential divisors of \coqdocvariable{n} from 1 to the square root of \coqdocvariable{n}. Such
+procedure is actually implemented in the Ssreflect's \coqdoclibrary{prime}
+\ssrm{prime} module and proved correct with respect to the
+definition similar to the one above,\footnote{Although the
+implementation and the proof are somewhat non-trivial, as they require
+to build a primitively-recursive function, which performs the
+enumeration, so we do not consider them here.} so now one can test
+the numbers by equality by simply \textit{executing} the appropriate function
+and getting a boolean answer:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Eval} \coqdoctac{compute} \coqdoctac{in} \coqdocvar{prime} 239.\coqdoceol
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{2.50em}
+= \coqdocconstructor{true}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdocinductive{bool}
+
+\coqdocemptyline
+
+
+Therefore, we can summarize that the \textit{decidability} is what draws the
+line between propositions encoded by means of Coq's \coqdockw{Prop} datatypes
+and procedures, returning a \coqdocinductive{bool} result. \coqdockw{Prop} provides a way to
+encode a \textit{larger} class of logical statements, in particular, thanks
+to the fact that it allows one to use quantifiers and, therefore,
+encode higher-order propositions. The price to pay for the
+expressivity is the necessity to explicitly construct the proofs of
+the encoded statements, which might lead to series of tedious and
+repetitive scripts. \coqdocinductive{bool}-returning functions, when implemented in
+Coq, are decidable by construction (as Coq enforces termination), and,
+therefore, provide a way to compute the propositions they
+implement. Of course, in order to be reduced to \coqdocconstructor{true} or \coqdocconstructor{false}, all
+quantifiers should be removed by means of instantiated the
+corresponding bound variables, after which the computation becomes
+possible.
+
+
+For instance, while the expression (\coqdoclibrary{prime} 239) || (\coqdoclibrary{prime} 42) can be
+evaluated to \coqdocconstructor{true} right away, whereas the expression
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{\ensuremath{\forall}} \coqdocvariable{n}, (\coqdoclibrary{prime} \coqdocvariable{n}) || \coqdoclibrary{prime} (\coqdocvariable{n} + 1)
+
+\coqdocemptyline
+
+
+is not even well-typed. The reason for this is that polymorphic
+\coqdockw{\ensuremath{\forall}}-quantification in Coq does not admit \textit{values} to come after
+the comma (so the dependent function type ``$\Pi{}n:~\textsf{nat}, n$''
+is malformed), similarly to how one cannot write a \textit{type} \coqdocvar{Int} \ensuremath{\rightarrow} 3
+in Haskell\index{Haskell}, as it does not make sense. This
+expression can be, however, \textit{coerced} into \coqdockw{Prop} by means of
+comparing the boolean expression with \coqdocconstructor{true} using propositional
+equality
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{\ensuremath{\forall}} \coqdocvariable{n}, ((\coqdoclibrary{prime} \coqdocvariable{n}) || \coqdoclibrary{prime} (\coqdocvariable{n} + 1) = \coqdocconstructor{true})
+
+\coqdocemptyline
+
+
+which makes the whole expression to be of type \coqdockw{Prop}. This last
+example brings us to the insight that the \coqdocinductive{bool}-returning functions
+(i.e., decidable predicates) can be naturally \textit{injected}
+\index{injection} into propositions of sort \coqdockw{Prop} by simply
+comparing their result with \coqdocconstructor{true} via propositional equality, defined
+in Chapter~\ref{ch:eqrew}. This is what is done by Ssreflect
+automatically using the implicit\index{coercion}\ccom{Coercion}
+\textit{coercion}, imported by the \coqdoclibrary{ssrbool} module:\ssrm{ssrbool}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Coercion} \coqdocvar{is\_true} (\coqdocvariable{b}: \coqdocinductive{bool}) := \coqdocvariable{b} = \coqdocconstructor{true}
+
+\coqdocemptyline
+
+
+This coercion can be seen as an implicit type conversion, familiar
+from the languages like Scala or Haskell, 
+\index{Scala}\index{Haskell}and it inserted by Coq automatically
+every time it expects to see a proposition of sort \coqdockw{Prop}, but instead
+encounters a boolean value. Let us consider the following goal as an
+example:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Goal} \coqdocvar{prime} (16 + 14) \ensuremath{\rightarrow} \coqdocvar{False}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}. \coqdocvar{\texttt{\emph{done}}}. \coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+As we can see, the proof is rather short, and, in fact, done by
+Coq/Ssreflect fully automatically. In fact, the system first
+\textit{computes} the value of \coqdoclibrary{prime} (16 + 14), which is, obviously
+\coqdocconstructor{false}. Then the boolean value \coqdocconstructor{false} is coerced into the
+propositional equality \coqdocconstructor{false} = \coqdocconstructor{true}, as previously described. The
+equality is then automatically discriminated (see
+Section~\ref{sec:discr}), which allows the system to infer the
+falsehood, completing the proof.
+
+
+This example and the previous discussion should convey the idea that
+\textit{decidable propositions should be implemented as computable functions
+returning a boolean result}. This simple design pattern makes it
+possible to take full advantage of the computational power of Coq as a
+programming language and prove decidable properties automatically,
+rather than by means of imposing a burden of constructing an explicit
+proof. We have just seen how a boolean result can be easily injected
+back to the world of propositions. This computational approach to
+proofs is what has been taken by Ssreflect to the extreme, making the
+proofs about common mathematical constructions to be very short, as
+most of the proof obligations simply \textit{do not appear}, as the system is
+possible to reduce them by means of performing the computations on the
+fly. Even though, as discussed, some propositions can be only encoded
+as elements of \coqdockw{Prop}, our general advice is to rely on the
+computations whenever it is possible.
+
+
+In the following subsections we will elaborate on some additional
+specifications and proof patterns, which are enabled by using boolean
+values instead of full-fledged propositions from \coqdockw{Prop}.
+
+
+\subsection{Using conditionals in predicates}
+
+
+
+
+The ternary conditional operator \coqdockw{if}-\coqdockw{then}-\coqdockw{else} is something that
+programmers use on a regular basis. However, when it comes to the
+specifications in the form of Coq's standard propositions it turns out
+one cannot simply employ the \coqdockw{if}-\coqdockw{then}-\coqdockw{else} connective in them, as it
+expects its conditional argument to be of type \coqdocinductive{bool}. This
+restriction is, again, a consequence of the fact that the result of
+\coqdockw{if}-\coqdockw{then}-\coqdockw{else} expression should be computable, which conflicts with
+the fact that not every proposition is decidable and, hence, there is
+no sound way overload the conditional operator, so it would rely on
+the existence of the proof of its conditional (or its negation).
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{prime\_spec\_bad} \coqdocvariable{n} \coqdocvariable{m} : \coqdockw{Prop} := \coqdocvariable{m} = (\coqdockw{if} \coqdocdefinition{isPrime} \coqdocvariable{n} \coqdockw{then} 1 \coqdockw{else} 2).\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdocvar{Error}: \coqdocvar{In} \coqdocvar{environment}\coqdoceol
+\coqdocnoindent
+\coqdocvariable{m} : \coqdocinductive{nat}\coqdoceol
+\coqdocnoindent
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocnoindent
+\coqdocvar{The} \coqdocvar{term} "isPrime n" \coqdocvar{has} \coqdockw{type} "Prop" \coqdocvar{while} \coqdocvar{it} \coqdockw{is} \coqdocvar{expected} \coqdocvar{to} \coqdocvar{\texttt{\emph{have}}} \coqdockw{type} "bool".
+
+\coqdocemptyline
+
+
+Fortunately, the computable predicates are free from this problem, so
+on can freely use them in the conditionals:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{prime\_spec} \coqdocvar{n} \coqdocvar{m} : \coqdockw{Prop} := \coqdocvar{m} = (\coqdockw{if} \coqdocvar{prime} \coqdocvar{n} \coqdockw{then} 1 \coqdockw{else} 2).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\subsection{Case analysing on a boolean assumption}
+
+
+
+
+Another advantage of the boolean predicates is that they automatically
+come with a natural case analysis principle: reasoning about an
+outcome of a particular predicate, one can always consider two
+possibilities: when it returned \coqdocconstructor{true} or \coqdocconstructor{false}.\footnote{We have
+already seen an instance of such case analysis in the proof of the
+\coqdocvar{leqP} lemma in Section~\ref{sec:enccustom} of
+Chapter~\ref{ch:eqrew}, although deliberately did not elaborate on it
+back then.} This makes it particularly pleasant to reason about the
+programs and specifications that use conditionals, which is
+demonstrated by the following example.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{discr\_prime} \coqdocvar{n} := (\coqdockw{if} \coqdocvar{prime} \coqdocvar{n} \coqdockw{then} 0 \coqdockw{else} 1) + 1.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Let us now prove that the definition \coqdocdefinition{prime\_spec} gives a precise
+specification of the function \coqdocdefinition{discr\_prime}:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{discr\_prime\_spec} : \coqdockw{\ensuremath{\forall}} \coqdocvar{n}, \coqdocvar{prime\_spec} \coqdocvar{n} (\coqdocvar{discr\_prime} \coqdocvar{n}).\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow}\coqdocvar{n}. \coqdoctac{rewrite} /\coqdocvar{prime\_spec} /\coqdocvar{discr\_prime}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+(\coqdockw{if} \coqdoclibrary{prime} \coqdocvariable{n} \coqdockw{then} 0 \coqdockw{else} 1) + 1 = (\coqdockw{if} \coqdoclibrary{prime} \coqdocvariable{n} \coqdockw{then} 1 \coqdockw{else} 2)
+
+\coqdocemptyline
+
+
+The proof of the specification is totally in the spirit of what one
+would have done when proving it manually: we just case-analyse on the
+value of \coqdoclibrary{prime} \coqdocvariable{n}, which is either \coqdocconstructor{true} or \coqdocconstructor{false}. Similarly to
+the way the rewritings are handled by means of unification, in both
+cases the system substitutes \coqdoclibrary{prime} \coqdocvariable{n} with its boolean value in the
+specification as well. The evaluation completes the proof.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{case}: (\coqdocvar{prime} \coqdocvar{n}).\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Another common use case of boolean predicates comes from the
+possibility to perform a case analysis on the boolean \textit{computable
+equality}, which can be employed in the proof proceeding by an
+argument ``let us assume \coqdocvariable{a} to be equal to \coqdocvariable{b} (or not)''. As already
+hinted by the example with the function equality earlier in this
+section, the computable equality is not always possible to
+implement. Fortunately, it can be implemented for a large class of
+datatypes, such as booleans, natural numbers, lists and sets (of
+elements with computable equality), and it was implemented in
+Ssreflect, so one can take an advantage of it in the
+proofs.\footnote{The way the computable equality is encoded so it
+would work uniformly for different types is an interesting topic by
+itself, so we postpone its explanation until
+Chapter~\ref{ch:depstruct}}
+
+
+
+
+\section{The \textsf{\textbf{reflect}} type family}
+
+
+\label{sec:reflect}
+
+
+Being able to state all the properties of interest in a way that they
+are decidable is a true blessing. However, even though encoding
+everything in terms of \coqdocinductive{bool}-returning functions and connectives
+comes with the obvious benefits, reasoning in terms of \coqdockw{Prop}s might
+be more convenient when the information of the structure of the proofs
+matters. For instance, let us consider the following situation:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Variables} \coqdocvar{do\_check1} \coqdocvar{do\_check2} : \coqdocvar{nat} \ensuremath{\rightarrow} \coqdocvar{bool}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Hypothesis} \coqdocvar{H}: \coqdockw{\ensuremath{\forall}} \coqdocvar{n}, \coqdocvar{do\_check2} \coqdocvar{n} \ensuremath{\rightarrow} \coqdocvar{prime} \coqdocvar{n}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{check\_prime} \coqdocvar{n} : (\coqdocvar{do\_check1} \coqdocvar{n}) \&\& (\coqdocvar{do\_check2} \coqdocvar{n}) \ensuremath{\rightarrow} \coqdocvar{prime} \coqdocvar{n}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The lemma \coqdoclemma{check\_prime} employs the boolean conjunction \&\& from the
+\coqdoclibrary{ssrbool} module in its assumption, so we know that its result is some
+boolean value. However simply case-analysing on its component does not
+bring any results. What we want indeed is a way to \textit{decompose} the
+boolean conjunction into the components and then use the hypothesis
+\coqdocaxiom{H}. This is what could be accomplished easily, had we employed the
+\textit{propositional conjunction} \ensuremath{\land} instead, as it comes with a
+case-analysis principle.
+
+
+
+
+ \ccom{Abort} \begin{coqdoccode}
+\coqdocnoindent
+\coqdockw{Abort}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+This is why we need a mechanism to conveniently switch between two
+possible representation. Ssreflect solves this problem by employing
+the familiar rewriting machinery (see Section~\ref{sec:indexed} of
+Chapter~\ref{ch:eqrew}) and introducing the inductive predicate
+family \coqdocinductive{reflect}, which connects propositions and booleans:
+
+
+\ssrd{reflect}
+\index{reflect datatype@{\textsf{reflect} datatype}}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{Bool.reflect}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocinductive{reflect} (\coqdocvariable{P} : \coqdockw{Prop}) : \coqdocinductive{bool} \ensuremath{\rightarrow} \coqdockw{Set} :=\coqdoceol
+\coqdocindent{1.00em}
+\ensuremath{|} \coqdocvar{ReflectT} \coqdockw{\texttt{\emph{of}}}   \coqdocvariable{P} : \coqdocinductive{reflect} \coqdocvariable{P} \coqdocconstructor{true}\coqdoceol
+\coqdocindent{1.00em}
+\ensuremath{|} \coqdocvar{ReflectF} \coqdockw{\texttt{\emph{of}}} \textasciitilde \coqdocvariable{P} : \coqdocinductive{reflect} \coqdocvariable{P} \coqdocconstructor{false}.
+
+\coqdocemptyline
+
+
+Similarly to the custom rewriting rules, the \coqdocinductive{reflect} predicate is
+nothing but a convenient way to encode a ``truth'' table with respect to
+the predicate \coqdocvariable{P}, which is \coqdocinductive{reflect}'s only parameter. In other
+words, the propositions (\coqdocinductive{reflect} \coqdocvariable{P} \coqdocvariable{b}) ensures that (\coqdocvar{is\_true} \coqdocvariable{b}) and
+\coqdocvariable{P} are logically equivalent and can be replaced one by another. For
+instance, the following rewriting lemmas \index{rewriting lemma} can
+be proved for the simple instances of \coqdockw{Prop}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{trueP} : \coqdocvar{reflect} \coqdocvar{True} \coqdocvar{true}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}. \coqdoctac{by} \coqdoctac{constructor}. \coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{falseP} : \coqdocvar{reflect} \coqdocvar{False} \coqdocvar{false}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}. \coqdoctac{by} \coqdoctac{constructor}. \coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The proofs with boolean truth and falsehood can be then completed by
+case analysis, as with any other rewriting rules:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Goal} \coqdocvar{false} \ensuremath{\rightarrow} \coqdocvar{False}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}. \coqdoctac{by} \coqdoctac{case}:\coqdocvar{falseP}. \coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\subsection{Reflecting logical connectives}
+
+
+
+
+The true power of the \coqdocinductive{reflect} predicate, though, is that it might be
+put to work with arbitrary logical connectives and user-defined
+predicates, therefore delivering the rewriting principles, allowing
+one to switch between \coqdocinductive{bool} and \coqdockw{Prop} (in the decidable case) by
+means of rewriting lemmas. Ssreflect comes with a number of such
+lemmas, so let us consider one of them, \coqdoclemma{andP}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{andP} (\coqdocvar{b1} \coqdocvar{b2} : \coqdocvar{bool}) : \coqdocvar{reflect} (\coqdocvar{b1} \ensuremath{\land} \coqdocvar{b2}) (\coqdocvar{b1} \&\& \coqdocvar{b2}).\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}. \coqdoctac{by} \coqdoctac{case} \coqdocvar{b1}; \coqdoctac{case} \coqdocvar{b2}; \coqdoctac{constructor}\ensuremath{\Rightarrow} //; \coqdoctac{case}. \coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Notice that \coqdoclemma{andP} is stated over two boolean variables, \coqdocvariable{b1} and
+\coqdocvariable{b2}, which, nevertheless, are treated as instances of \coqdockw{Prop} in the
+conjunction \ensuremath{\land}, being implicitly coerced. 
+
+
+We can now put this lemma to work and prove our initial example:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{check\_prime} \coqdocvar{n} : (\coqdocvar{do\_check1} \coqdocvar{n}) \&\& (\coqdocvar{do\_check2} \coqdocvar{n}) \ensuremath{\rightarrow} \coqdocvar{prime} \coqdocvar{n}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{case}: \coqdocvar{andP}=>//.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocaxiom{do\_check1} \coqdocvariable{n} \ensuremath{\land} \coqdocaxiom{do\_check2} \coqdocvariable{n} \ensuremath{\rightarrow} \coqdocconstructor{true} \ensuremath{\rightarrow} \coqdoclibrary{prime} \coqdocvariable{n}
+
+\coqdocemptyline
+
+
+Case analysis on the rewriting rule \coqdoclemma{andP} generates two goals, and
+the second one has \coqdocconstructor{false} as an assumption, so it is discharged
+immediately by using \texttt{//}\ssrtl{//}. The remaining goal has a
+shape that we can work with, so we conclude the proof by applying the
+hypothesis \coqdocaxiom{H} declared above.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{case}\ensuremath{\Rightarrow}\coqdocvar{\_} /\coqdocvar{H}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Although the example above is a valid usage of the reflected
+propositions, Ssreflect leverages the rewriting with respect to
+boolean predicates even more by defining a number of \textit{hint views} for
+the rewriting lemmas that make use of the \coqdocinductive{reflect} predicates. This
+allows one to use the rewriting rules (e.g., \coqdoclemma{andP}) in the form of
+\textit{views} \index{views}, which can be applied directly to an
+assumption or a goal, as demonstrated by the next definition.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{andb\_orb} \coqdocvar{b1} \coqdocvar{b2}: \coqdocvar{b1} \&\& \coqdocvar{b2} \ensuremath{\rightarrow} \coqdocvar{b1} || \coqdocvar{b2}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{case}/\coqdocvar{andP}\ensuremath{\Rightarrow}\coqdocvar{H1} \coqdocvar{H2}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{apply}/\coqdocvar{orP}; \coqdoctac{left}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The first line of the proof switched the top assumption from the
+boolean conjunction to the propositional one by means of \coqdoclemma{andP} used
+as a view. The second line applied the \coqdoclemma{orP} view, doing the similar
+switch in the goal, completing the proof by using a constructor of the
+propositional disjunction.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{andb\_orb}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Let us take a brief look to the obtained proof term for \coqdocdefinition{andb\_orb}.
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{andb\_orb} = \coqdoceol
+\coqdocnoindent
+\coqdockw{fun} (\coqdocvariable{b1} \coqdocvariable{b2} : \coqdocinductive{bool}) (\coqdockw{goal} : \coqdocvariable{b1} \&\& \coqdocvariable{b2}) \ensuremath{\Rightarrow}\coqdoceol
+\coqdocnoindent
+(\coqdockw{fun} \coqdocvar{F} : \coqdockw{\ensuremath{\forall}} (\coqdocvariable{a} : \coqdocvariable{b1}) (\coqdocvariable{b} : \coqdocvariable{b2}),\coqdoceol
+\coqdocindent{8.00em}
+(\coqdockw{fun} \coqdocvar{\_} : \coqdocvariable{b1} \ensuremath{\land} \coqdocvariable{b2} \ensuremath{\Rightarrow} \coqdocvar{is\_true} (\coqdocvariable{b1} || \coqdocvariable{b2})) (\coqdocvar{conj} \coqdocvariable{a} \coqdocvariable{b}) \ensuremath{\Rightarrow}\coqdoceol
+\coqdocindent{0.50em}
+\coqdockw{match}\coqdoceol
+\coqdocindent{1.50em}
+\coqdoclemma{elimTF} (\coqdoclemma{andP} \coqdocvariable{b1} \coqdocvariable{b2}) \coqdockw{goal} \coqdockw{as} \coqdocvariable{a} \coqdockw{return} ((\coqdockw{fun} \coqdocvar{\_} : \coqdocvariable{b1} \ensuremath{\land} \coqdocvariable{b2} \ensuremath{\Rightarrow} \coqdocvar{is\_true} (\coqdocvariable{b1} || \coqdocvariable{b2})) \coqdocvariable{a})\coqdoceol
+\coqdocindent{0.50em}
+\coqdockw{with}\coqdoceol
+\coqdocindent{0.50em}
+\ensuremath{|} \coqdocvar{conj} \coqdocvariable{x} \coqdocvar{x0} \ensuremath{\Rightarrow} \coqdocvar{F} \coqdocvariable{x} \coqdocvar{x0}\coqdoceol
+\coqdocindent{0.50em}
+\coqdockw{end})\coqdoceol
+\coqdocindent{1.00em}
+(\coqdockw{fun} (\coqdocvar{H1} : \coqdocvariable{b1}) (\coqdocvar{\_} : \coqdocvariable{b2}) \ensuremath{\Rightarrow}\coqdoceol
+\coqdocindent{1.50em}
+(\coqdockw{fun} \coqdocvar{F} : \coqdockw{if} \coqdocconstructor{true} \coqdockw{then} \coqdocvariable{b1} \ensuremath{\lor} \coqdocvariable{b2} \coqdockw{else} \textasciitilde (\coqdocvariable{b1} \ensuremath{\lor} \coqdocvariable{b2}) \ensuremath{\Rightarrow}\coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{introTF} (\coqdocvar{c}:=\coqdocconstructor{true}) \coqdoclemma{orP} \coqdocvar{F}) (\coqdocvar{or\_introl} \coqdocvar{H1}))\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} \coqdocvariable{b1} \coqdocvariable{b2} : \coqdocinductive{bool}, \coqdocvariable{b1} \&\& \coqdocvariable{b2} \ensuremath{\rightarrow} \coqdocvariable{b1} || \coqdocvariable{b2}
+
+\coqdocemptyline
+
+
+As we can see, the calls to the rewriting lemmas \coqdoclemma{andP} and \coqdoclemma{orP} were
+implicitly ``wrapped'' into the call of hints \coqdoclemma{elimTF} and \coqdocvar{introTF},
+correspondingly. Defined via the conditional operator, both these view
+hints allowed us to avoid the second redundant goal, which we would be
+be forced to deal with, had we simply gone with case analysis on
+\coqdoclemma{andP} and \coqdoclemma{orP} as rewriting rules.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{elimTF}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdoclemma{elimTF}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} (\coqdocvariable{P} : \coqdockw{Prop}) (\coqdocvariable{b} \coqdocvar{c} : \coqdocinductive{bool}),\coqdoceol
+\coqdocindent{3.50em}
+\coqdocinductive{reflect} \coqdocvariable{P} \coqdocvariable{b} \ensuremath{\rightarrow} \coqdocvariable{b} = \coqdocvar{c} \ensuremath{\rightarrow} \coqdockw{if} \coqdocvar{c} \coqdockw{then} \coqdocvariable{P} \coqdockw{else} \textasciitilde \coqdocvariable{P}
+
+\coqdocemptyline
+
+
+\begin{exercise}[Reflecting exclusive disjunction]
+
+
+Let us define a propositional version of the \textit{exclusive or}
+\index{exclusive disjunction} predicate:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{XOR} (\coqdocvar{P} \coqdocvar{Q}: \coqdockw{Prop}) := (\coqdocvar{P} \ensuremath{\lor} \coqdocvar{Q}) \ensuremath{\land} \~{}(\coqdocvar{P} \ensuremath{\land} \coqdocvar{Q}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\noindent
+as well as its boolean version (in a curried form, so it takes just
+one argument and returns a function):
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{xorb} \coqdocvar{b} := \coqdockw{if} \coqdocvar{b} \coqdockw{then} \coqdocvar{negb} \coqdockw{else} \coqdockw{fun} \coqdocvar{x} \ensuremath{\Rightarrow} \coqdocvar{x}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\noindent
+Now, prove the following \textit{generalized} reflection lemma \coqdoclemma{xorP\_gen} and
+its direct consequence, the usual reflection lemma \coqdoclemma{xorP}:
+
+
+\hint Recall that the \textit{reflect} predicate is just a rewriting rule,
+ so one can perform a case analysis on it.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{xorP\_gen} (\coqdocvar{b1} \coqdocvar{b2} : \coqdocvar{bool})(\coqdocvar{P1} \coqdocvar{P2}: \coqdockw{Prop}): \coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{reflect} \coqdocvar{P1} \coqdocvar{b1} \ensuremath{\rightarrow} \coqdocvar{reflect} \coqdocvar{P2} \coqdocvar{b2} \ensuremath{\rightarrow} \coqdocvar{reflect} (\coqdocvar{XOR} \coqdocvar{P1} \coqdocvar{P2}) (\coqdocvar{xorb} \coqdocvar{b1} \coqdocvar{b2}).\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{xorP} (\coqdocvar{b1} \coqdocvar{b2} : \coqdocvar{bool}): \coqdocvar{reflect} (\coqdocvar{XOR} \coqdocvar{b1} \coqdocvar{b2}) (\coqdocvar{xorb} \coqdocvar{b1} \coqdocvar{b2}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\end{exercise}
+
+
+\begin{exercise}[Alternative formulation of exclusive disjunction]
+
+
+Let us consider an alternative version of exclusive or, defined by
+means of the predicate \coqdocdefinition{XOR'}:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{XOR'} (\coqdocvar{P} \coqdocvar{Q}: \coqdockw{Prop}) := (\coqdocvar{P} \ensuremath{\land} \textasciitilde\coqdocvar{Q}) \ensuremath{\lor} (\~{}\coqdocvar{P} \ensuremath{\land} \coqdocvar{Q}).\coqdoceol
+\end{coqdoccode}
+
+
+\noindent
+
+
+Prove the following equivalence lemma between to versions of \coqdocdefinition{XOR}:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{XORequiv} \coqdocvar{P} \coqdocvar{Q}: \coqdocvar{XOR} \coqdocvar{P} \coqdocvar{Q} \ensuremath{\leftrightarrow} \coqdocvar{XOR'} \coqdocvar{P} \coqdocvar{Q}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\noindent
+The final step is to use the equivalence we have just proved in order
+to establish an alternative version of the reflective correspondence
+of exclusive disjunction.
+
+
+\hint Use the \coqdockw{Search} machinery to look for lemmas that might help
+ to leverage the equivalence between two predicates and make the
+ following proof to be a one-liner.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{xorP'} (\coqdocvar{b1} \coqdocvar{b2} : \coqdocvar{bool}): \coqdocvar{reflect} (\coqdocvar{XOR'} \coqdocvar{b1} \coqdocvar{b2}) (\coqdocvar{xorb} \coqdocvar{b1} \coqdocvar{b2}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\end{exercise}
+
+
+Unsurprisingly, every statement about exclusive or, e.g., its
+commutativity and associativity, is extremely easy to prove when it is
+considered as a boolean function. 
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{xorbC} (\coqdocvar{b1} \coqdocvar{b2}: \coqdocvar{bool}) : (\coqdocvar{xorb} \coqdocvar{b1} \coqdocvar{b2}) = (\coqdocvar{xorb} \coqdocvar{b2} \coqdocvar{b1}).\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}. \coqdoctac{by} \coqdoctac{case}: \coqdocvar{b1}; \coqdoctac{case}: \coqdocvar{b2}. \coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{xorbA} (\coqdocvar{b1} \coqdocvar{b2} \coqdocvar{b3}: \coqdocvar{bool}) : (\coqdocvar{xorb} (\coqdocvar{xorb} \coqdocvar{b1} \coqdocvar{b2}) \coqdocvar{b3}) = (\coqdocvar{xorb} \coqdocvar{b1} (\coqdocvar{xorb} \coqdocvar{b2} \coqdocvar{b3})).\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}. \coqdoctac{by} \coqdoctac{case}: \coqdocvar{b1}; \coqdoctac{case}: \coqdocvar{b2}; \coqdoctac{case}: \coqdocvar{b3}=>//. \coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+It is also not difficult to prove the propositional counterparts of
+the above lemmas for decidable propositions, reflected by them, hence
+the following exercise.
+
+
+\begin{exercise}
+
+
+Prove the following specialized lemmas for decidable propositions
+represented by booleans (without using the \coqdoctac{intuition} tactic):
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{xorCb} (\coqdocvar{b1} \coqdocvar{b2}: \coqdocvar{bool}) : (\coqdocvar{XOR} \coqdocvar{b1} \coqdocvar{b2}) \ensuremath{\leftrightarrow} (\coqdocvar{XOR} \coqdocvar{b2} \coqdocvar{b1}).\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{xorAb} (\coqdocvar{b1} \coqdocvar{b2} \coqdocvar{b3}: \coqdocvar{bool}) : (\coqdocvar{XOR} (\coqdocvar{XOR} \coqdocvar{b1} \coqdocvar{b2}) \coqdocvar{b3}) \ensuremath{\leftrightarrow} (\coqdocvar{XOR} \coqdocvar{b1} (\coqdocvar{XOR} \coqdocvar{b2} \coqdocvar{b3})).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\hint In the proof of \coqdoclemma{xorAb} the generalized reflection lemma
+ \coqdoclemma{xorP\_gen} might come in handy.
+
+
+\hint A redundant assumption \coqdocaxiom{H} in the context can be erased by
+ typing \coqdoctac{clear} \coqdocaxiom{H} \ttac{clear} or \coqdoctac{move} \ensuremath{\Rightarrow} \{\coqdocaxiom{H}\}. The latter form can
+ be combined with any bookkeeping sequence, not only with \coqdoctac{move}
+ tactics.
+
+
+\hint The Coq's embedded tactic \coqdoctac{intuition} can be helpful for
+ automatically solving goals in propositional logic.\ttac{intuition}
+
+
+\end{exercise}
+
+
+\subsection{Reflecting decidable equalities}
+
+
+\label{sec:eqrefl}
+
+
+Logical connectives are not the only class of inductive predicates
+that is worth building a \coqdocinductive{reflect}-based rewriting principle for.
+Another useful class of decidable propositions, which are often
+reflected, are equalities.
+
+
+Postponing the description of a generic mechanism for declaring
+polymorphic decidable equalities until Chapter~\ref{ch:depstruct},
+let us see how switching between decidable \coqdocinductive{bool}-returning equality
+== (defined in the Ssreflect's module \coqdoclibrary{eqtype}\ssrm{eqtype}) and
+the familiar propositional equality can be beneficial.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{foo} (\coqdocvar{x} \coqdocvar{y}: \coqdocvar{nat}) := \coqdockw{if} \coqdocvar{x} == \coqdocvar{y} \coqdockw{then} 1 \coqdockw{else} 0.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The function \coqdocdefinition{foo} naturally uses the natural numbers' boolean
+equality == in its body, as it is the only one that can be used in
+the conditional operator. The next goal, though, assumes the
+propositional equality of \coqdocvariable{x} and \coqdocvariable{y}, which are passed to \coqdocdefinition{foo} as
+arguments.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Goal} \coqdockw{\ensuremath{\forall}} \coqdocvar{x} \coqdocvar{y}, \coqdocvar{x} = \coqdocvar{y} \ensuremath{\rightarrow} \coqdocvar{foo} \coqdocvar{x} \coqdocvar{y} = 1.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow}\coqdocvar{x} \coqdocvar{y}; \coqdoctac{rewrite} /\coqdocvar{foo}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{x} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{y} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocvariable{x} = \coqdocvariable{y} \ensuremath{\rightarrow} (\coqdockw{if} \coqdocvariable{x} == \coqdocvariable{y} \coqdockw{then} 1 \coqdockw{else} 0) = 1
+
+\coqdocemptyline
+
+
+The rewriting rule/view lemma \coqdoclemma{eqP}, imported from \coqdoclibrary{eqtype} allows us
+to switch from propositional to boolean equality, which
+makes the assumption to be \coqdocvariable{x} == \coqdocvariable{y}. Next, we combine the implicit
+fact that \coqdocvariable{x} == \coqdocvariable{y} in the assumption of a proposition is in fact (\coqdocvariable{x}
+== \coqdocvariable{y}) = \coqdocconstructor{true} to perform in-place rewriting (see
+Section~\ref{sec:in-place}) by means of the \texttt{->}\ssrtl{->}
+tactical, so the rest of the proof is simply by computation.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{move}/\coqdocvar{eqP}=>->.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\begin{exercise}
+
+
+Sometimes, the statement ``there exists unique $x$ and $y$, such that
+$P(x, y)$ holds'' is mistakingly formalized as $\exists ! x~\exists !
+y~P(x, y)$. In fact, the latter assertion is much weaker than the
+previous one. The goal of this exercise is to demonstrate this
+formally.\footnote{I am grateful to Vladimir Reshetnikov
+(\href{https://twitter.com/vreshetnikov}{\texttt{@vreshetnikov}}) for
+making this observation on Twitter.}
+
+
+First, prove the following lemma, stating that the first assertion can
+be weakened from the second one.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{ExistsUnique1} \coqdocvar{A} (\coqdocvar{P} : \coqdocvar{A} \ensuremath{\rightarrow} \coqdocvar{A} \ensuremath{\rightarrow} \coqdockw{Prop}): \coqdoceol
+\coqdocindent{1.00em}
+(\coqdoctac{\ensuremath{\exists}} !\coqdocvar{x}, \coqdoctac{\ensuremath{\exists}} \coqdocvar{y}, \coqdocvar{P} \coqdocvar{x} \coqdocvar{y}) \ensuremath{\rightarrow} \coqdoceol
+\coqdocindent{1.00em}
+(\coqdoctac{\ensuremath{\exists}} !\coqdocvar{x}, \coqdoctac{\ensuremath{\exists}} \coqdocvar{y}, \coqdocvar{P} \coqdocvar{y} \coqdocvar{x}) \ensuremath{\rightarrow}\coqdoceol
+\coqdocindent{1.00em}
+(\coqdoctac{\ensuremath{\exists}} !\coqdocvar{x}, \coqdoctac{\ensuremath{\exists}} !\coqdocvar{y}, \coqdocvar{P} \coqdocvar{x} \coqdocvar{y}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The notation \coqdoctac{\ensuremath{\exists}} ! \coqdocvariable{x}, \coqdocvariable{P} \coqdocvariable{x} is an abbreviation for the sigma-type,
+whose second component is the higher-order predicate \coqdocdefinition{unique}, defined
+as follows:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{unique}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{unique} = \coqdoceol
+\coqdocnoindent
+\coqdockw{fun} (\coqdocvariable{A} : \coqdockw{Type}) (\coqdocvariable{P} : \coqdocvariable{A} \ensuremath{\rightarrow} \coqdockw{Prop}) (\coqdocvariable{x} : \coqdocvariable{A}) \ensuremath{\Rightarrow}\coqdoceol
+\coqdocnoindent
+\coqdocvariable{P} \coqdocvariable{x} \ensuremath{\land} (\coqdockw{\ensuremath{\forall}} \coqdocvar{x'} : \coqdocvariable{A}, \coqdocvariable{P} \coqdocvar{x'} \ensuremath{\rightarrow} \coqdocvariable{x} = \coqdocvar{x'})\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} \coqdocvariable{A} : \coqdockw{Type}, (\coqdocvariable{A} \ensuremath{\rightarrow} \coqdockw{Prop}) \ensuremath{\rightarrow} \coqdocvariable{A} \ensuremath{\rightarrow} \coqdockw{Prop}
+
+\coqdocemptyline
+
+
+As we can see, the definition \coqdocdefinition{unique} not just ensures that \coqdocvariable{P} \coqdocvariable{x}
+holds (the left conjunct), but also that any \coqdocvar{x'} satisfying \coqdocvariable{P} is,
+in fact, equal to \coqdocvariable{x}. As on the top level \coqdocdefinition{unique} is merely a
+conjunction, it can be decomposed by \coqdoctac{case} and proved using the
+\coqdoctac{split} tactics.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Next, let us make sure that the statement in the conclusion of lemma
+\coqdoclemma{ExistsUnique1}, in fact, admits predicates, satisfied by non-uniquely
+defined pair (\coqdocvariable{x}, \coqdocvariable{y}). You goal is to prove that the following
+predicate \coqdocdefinition{Q}, which obviously satisfied by (\coqdocconstructor{true}, \coqdocconstructor{true}), (\coqdocconstructor{false},
+\coqdocconstructor{true}) and (\coqdocconstructor{false}, \coqdocconstructor{false}) is nevertheless a subject of the second
+statement.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{Q} \coqdocvar{x} \coqdocvar{y} : \coqdockw{Prop} := \coqdoceol
+\coqdocindent{1.00em}
+(\coqdocvar{x} == \coqdocvar{true}) \&\& (\coqdocvar{y} == \coqdocvar{true}) || (\coqdocvar{x} == \coqdocvar{false}).\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{qlm} : (\coqdoctac{\ensuremath{\exists}} !\coqdocvar{x}, \coqdoctac{\ensuremath{\exists}} !\coqdocvar{y}, \coqdocvar{Q} \coqdocvar{x} \coqdocvar{y}).\coqdoceol
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\hint The following lemma \coqdocabbreviation{eqxx}, stating that the boolean equality
+ \coqdocvariable{x} == \coqdocvariable{x} always holds, might be useful for instantiating arguments
+ for hypotheses you will get during the proof.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{eqxx}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocabbreviation{eqxx}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} (\coqdocaxiom{T} : \coqdocvar{eqType}) (\coqdocvariable{x} : \coqdocaxiom{T}), \coqdocvariable{x} == \coqdocvariable{x}
+
+\coqdocemptyline
+
+
+Finally, you are invited to prove that the second statement is
+\textit{strictly} weaker than the first one by proving the following lemma,
+which states that the reversed implication of the two statements for
+an arbitrary predicate \coqdocvariable{P} implies falsehood.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{ExistsUnique2} : \coqdoceol
+\coqdocindent{1.00em}
+(\coqdockw{\ensuremath{\forall}} \coqdocvar{A} (\coqdocvar{P} : \coqdocvar{A} \ensuremath{\rightarrow} \coqdocvar{A} \ensuremath{\rightarrow} \coqdockw{Prop}),\coqdoceol
+\coqdocindent{1.50em}
+(\coqdoctac{\ensuremath{\exists}} !\coqdocvar{x}, \coqdoctac{\ensuremath{\exists}} !\coqdocvar{y}, \coqdocvar{P} \coqdocvar{x} \coqdocvar{y}) \ensuremath{\rightarrow}\coqdoceol
+\coqdocindent{1.50em}
+(\coqdoctac{\ensuremath{\exists}} !\coqdocvar{x}, \coqdoctac{\ensuremath{\exists}} \coqdocvar{y}, \coqdocvar{P} \coqdocvar{x} \coqdocvar{y}) \ensuremath{\land} (\coqdoctac{\ensuremath{\exists}} !\coqdocvar{x}, \coqdoctac{\ensuremath{\exists}} \coqdocvar{y}, \coqdocvar{P} \coqdocvar{y} \coqdocvar{x})) \ensuremath{\rightarrow}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{False}.\coqdoceol
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+\end{exercise}
+\begin{coqdoccode}
+\coqdocemptyline
+\end{coqdoccode}

@@ -1,0 +1,1922 @@
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+\chapter{Inductive Reasoning in Ssreflect}
+\label{ch:ssrstyle}
+ 
+
+
+
+In the previous chapters of this course, we have become acquainted
+with the main concepts of constructive logic, Coq and
+Ssreflect. However, the proofs we have seen so far are mostly done by
+case analysis, application of hypotheses and various forms of
+rewriting. In this chapter we will consider in more detail the proofs
+that employ inductive reasoning as their main component. We will see
+how such proofs are typically structured in Ssreflect, making the
+corresponding scripts very concise, yet readable and maintainable. We
+will also learn a few common techniques that will help to adapt an
+induction hypothesis to become more suitable for a goal.
+
+
+In the rest of the chapter we will be constantly relying on a series
+of standard Ssreflect modules, such as \coqdoclibrary{ssrbool}, \coqdoclibrary{ssrnat} and
+\coqdoclibrary{eqtype}, which we import right away.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{\textsf{{From}}} \coqdocvar{mathcomp}\coqdoceol
+\coqdocnoindent
+\coqdockw{Require} \coqdockw{Import} \coqdocvar{ssreflect} \coqdocvar{ssrbool} \coqdocvar{ssrnat} \coqdocvar{eqtype} \coqdocvar{ssrfun} \coqdocvar{seq}.\coqdoceol
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\section{Structuring the proof scripts}
+
+
+An important part of the proof process is keeping to an established
+proof layout, which helps to maintain the proofs readable and restore
+the intuition driving the prover's hand.  Ssreflect offers a number of
+syntactic primitives that help to maintain such a layout, and in this
+section we give a short overview of them. As usual, the Ssreflect
+reference manual~\cite{Gontier-al:TR} (Chapter 6) provides an
+exhaustive formal definition of each primitive's semantics, so we will
+just cover the base cases here, hoping that the subsequent proofs will
+provide more intuition on typical usage scenarios.
+
+
+\subsection{Bullets and terminators}
+
+
+
+
+The proofs proceeding by induction and case analysis typically require
+us to prove several goals, one by one, in a sequence picked by the
+system.  It is considered to be a good practice to indent the subgoals
+(except for the last one) when there are several to prove. For
+instance, let us consider the following almost trivial lemma:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{andb\_true\_elim} \coqdocvar{b} \coqdocvar{c}: \coqdocvar{b} \&\& \coqdocvar{c} \ensuremath{\rightarrow} \coqdocvar{c} = \coqdocvar{true}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Indeed, the reflection machinery, presented in
+Section~\ref{sec:reflect} of Chapter~\ref{ch:boolrefl}, makes this
+proof a one liner (\coqdoctac{by} \coqdoctac{case}/\coqdoclemma{andP}.). However, for the sake of
+demonstration, let us not appeal to it this time and do the proof as
+it would be done in a traditional Coq style: by mere case analysis.
+
+
+ \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{case}: \coqdocvar{c}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocconstructor{true} = \coqdocconstructor{true}\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdockw{subgoal} 2 (\coqdocvar{ID} 15) \coqdockw{\texttt{\emph{is}}}:\coqdoceol
+\coqdocindent{0.50em}
+\coqdocvariable{b} \&\& \coqdocconstructor{false} \ensuremath{\rightarrow} \coqdocconstructor{false} = \coqdocconstructor{true}
+
+\coqdocemptyline
+
+
+Case analysis on \coqdocvariable{c} (which is first moved down to the goal to become
+an assumption) immediately gives us two subgoals to prove. Each of
+them can be subsequently proved by the \textit{inner} cases analysis on \coqdocvariable{b},
+so we do, properly indenting the goals.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+- \coqdoctac{by} \coqdoctac{case}: \coqdocvar{b}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The proof script above successfully solves the first goal, as ensured
+by the \textit{terminator} tactical \index{terminators}\ssrtl{by} \coqdoctac{by},
+which we have seen previously. More precisely, \coqdoctac{by} \coqdocvar{tac}. first runs
+the script \coqdocvar{tac} and then applies a number of simplifications and
+discriminations to see if the proof can be completed. If the current
+goal is solved, \coqdoctac{by} \coqdocvar{tac}. simply terminates and proceeds to the next
+goal; otherwise it reports a proof script error. Alternative
+equivalent uses of the same principle would be \coqdocvar{tac}; \coqdoctac{by} []. or \coqdocvar{tac};
+\coqdocvar{\texttt{\emph{done}}},\ssrt{done} which do exactly the same.
+
+
+Notice that the first goal was indented and preceded by the \textit{bullet}
+-. \index{bullets} The bullet token, preceding a tactic
+invocation, has no operational effect on the proof and serves solely
+for the readability purposes. Alternative forms of tokens are
+\texttt{+} and \texttt{*}.
+
+
+\subsection{Using selectors and discharging subgoals}
+
+
+
+
+Let us restart this proof and show an alternative way to structure the
+proof script, which should account for multiple cases.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Restart}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{case}: \coqdocvar{c}; \coqdoctac{\texttt{{first}}} \coqdoctac{by} [].\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{b} : \coqdocinductive{bool}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocvariable{b} \&\& \coqdocconstructor{false} \ensuremath{\rightarrow} \coqdocconstructor{false} = \coqdocconstructor{true}
+
+\coqdocemptyline
+
+
+\index{selectors}
+\ssrtl{first}
+\ssrtl{last}
+
+
+Now, right after case-analysing on \coqdocvariable{c}, the proof script specifies
+that the \textit{first} of the generated subgoals should be solved using \coqdoctac{by}
+[]. In this case \texttt{first} is called \textit{selector}, and its
+counterpart \texttt{last} would specify that the last goal should be
+taken care of instead, before proceeding.
+
+
+Finally, if several simple goals can be foreseen as a result of case
+analysis, Coq provides a convenient way to discharge them in a
+structured way using \ssrtl{[|...|]} the [|...|] tactical:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Restart}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{case}:\coqdocvar{c}; [\coqdoctac{by} [] \ensuremath{|} \coqdoctac{by} \coqdoctac{case}: \coqdocvar{b}].\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The script above solves the first generated goal using \coqdoctac{by} [], and
+then solves the second one via \coqdoctac{by} \coqdoctac{case}: \coqdocvariable{b}.
+
+
+
+
+
+
+\subsection{Iteration and alternatives}
+
+
+
+
+Yet another possible way to prove the statement of our subject lemma
+is by employing Coq's \textit{repetition} tactical \coqdoctac{do}\ssrtl{do}. The
+script of the form \coqdoctac{do} !\coqdocvar{tac}. tries to apply the tactic \coqdocvar{tac} as many
+times as possible, as long as new goals are generated or no more goals
+are left to prove.\footnote{Be careful, though, as such proof script
+might never terminate if more and more new goals will be generated
+after each application of the iterated tactic. That said, while Coq
+itself enjoys the strong normalization property (i.e., the programs in
+it always \index{strong normalization} terminate), its tactic
+meta-language is genuinely Turing-complete, so the tactics, while
+constructing Coq programs/proofs, might never in fact
+terminate. Specifying the behaviour of tactics and their possible
+effects (including non-termination and failures) is a topic of an
+ongoing active
+research~\cite{Ziliani-al:ICFP13,Stampoulis-Shao:ICFP10}.} The
+\coqdoctac{do}-tactical can be also combined with the [|...|] tactical, so it
+will try to apply all of the enumerated tactics as alternatives. The
+following script finishes the proof of the whole lemma.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Restart}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{do} ![\coqdocvar{\texttt{\emph{done}}} \ensuremath{|} \coqdoctac{apply}: \coqdocvar{eqxx} \ensuremath{|} \coqdoctac{case}: \coqdocvar{b} \ensuremath{|} \coqdoctac{case}: \coqdocvar{c}].\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Notice that we have added two tactics into the alternative list,
+\coqdocvar{\texttt{\emph{done}}} and \coqdoctac{apply}: \coqdocabbreviation{eqxx}, which were doomed to fail. The script,
+nevertheless, has succeeded, as the remaining two tactics, \coqdoctac{case}: \coqdocvariable{b}
+and \coqdoctac{case}: \coqdocvariable{c}, did all the job. Lastly, notice that the \coqdoctac{do}-tactical
+can be specified \textit{how many} times it should try to run each tactic
+from the list by using the restricted form \coqdoctac{do} \coqdocvariable{n}!\coqdocvar{tac}, where \coqdocvariable{n} is
+the number of attempts (similarly to iterating the \coqdoctac{rewrite}
+tactics). The lemma above could be completed by the script of the form
+\coqdoctac{by} \coqdoctac{do} 2![...] with the same list of alternatives.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\section{Inductive predicates that should be functions}
+
+
+It has been already discussed in Chapter~\ref{ch:boolrefl} that,
+even though a lot of interesting propositions are inherently
+undecidable and should be, therefore, represented in Coq as instances
+of the sort \coqdockw{Prop}, one should strive to implement as many 
+\textit{decidable} propositions as possible as \coqdocinductive{bool}-returning
+function. Such ``computational'' approach to the propositions turns out
+to pay off drastically in the long-term perspective, as most of the
+usual proof burden will be carried out by Coq's computational
+component. In this section we will browse through a series of
+predicates defined both as inductive datatypes and boolean functions
+and compare the proofs of various properties stated over the
+alternative representations.
+
+
+One can define the fact that the only natural number which is equal
+to zero is the zero itself, as shown below:
+
+
+\ssrd{isZero}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocvar{isZero} (\coqdocvar{n}: \coqdocvar{nat}) : \coqdockw{Prop} := \coqdocvar{IsZero} \coqdockw{\texttt{\emph{of}}} \coqdocvar{n} = 0.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Naturally, such equality can be exploited to derived paradoxes, as the
+following lemma shows:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{isZero\_paradox}: \coqdocvar{isZero} 1 \ensuremath{\rightarrow} \coqdocvar{False}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}. \coqdoctac{by} \coqdoctac{case}. \coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+However, the equality on natural numbers is, decidable, so the very
+same definition can be rewritten as a function employing the boolean
+equality (==) (see Section~\ref{sec:eqrefl} of
+Chapter~\ref{ch:boolrefl}), which will make the proofs of paradoxes
+even shorter than they already are:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{is\_zero} \coqdocvar{n} : \coqdocvar{bool} := \coqdocvar{n} == 0.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{is\_zero\_paradox}: \coqdocvar{is\_zero} 1 \ensuremath{\rightarrow} \coqdocvar{False}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}. \coqdocvar{\texttt{\emph{done}}}. \coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+That is, instead of the unavoidable case-analysis with the first
+\coqdockw{Prop}-based definition, the functional definition made Coq compute
+the result for us, deriving the falsehood automatically.
+
+
+The benefits of the computable definitions become even more obvious
+when considering the next example, the predicate defining whether a
+natural number is even or odd. Again, we define two versions, the
+inductive predicate and a boolean function.
+
+
+\ssrd{evenP}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocvar{evenP} \coqdocvar{n} : \coqdockw{Prop} :=\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{Even0} \coqdockw{\texttt{\emph{of}}} \coqdocvar{n} = 0 \ensuremath{|} \coqdocvar{EvenSS} \coqdocvar{m} \coqdockw{\texttt{\emph{of}}} \coqdocvar{n} = \coqdocvar{m}.+2 \& \coqdocvar{evenP} \coqdocvar{m}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Fixpoint} \coqdocvar{evenb} \coqdocvar{n} := \coqdockw{if} \coqdocvar{n} \coqdockw{\texttt{\emph{is}}} \coqdocvar{n'}.+2 \coqdockw{then} \coqdocvar{evenb} \coqdocvar{n'} \coqdockw{else} \coqdocvar{n} == 0.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Let us now prove a simple property: that fact that (\coqdocvariable{n} + 1 + \coqdocvariable{n}) is
+even leads to a paradox. We first prove it for the version defined in
+\coqdockw{Prop}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{evenP\_contra} \coqdocvar{n} : \coqdocvar{evenP} (\coqdocvar{n} + 1 + \coqdocvar{n}) \ensuremath{\rightarrow} \coqdocvar{False}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{elim}: \coqdocvar{n}=>//[| \coqdocvar{n} \coqdocvar{Hn}]; \coqdoctac{\texttt{{first}}} \coqdoctac{by} \coqdoctac{rewrite} \coqdocvar{addn0} \coqdocvar{add0n}; \coqdoctac{case}=>//.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+We start the proof by induction on \coqdocvariable{n}, which is triggered by \coqdoctac{elim}:
+\coqdocvariable{n}.\footnote{Remember that the \coqdoctac{elim}, \ssrt{elim} as most of other
+Ssreflect's tactics operates on the top assumption.} The subsequent
+two goals (for the zero and the successor cases) are then simplified
+via \texttt{//} and the induction variable and hypothesis are given
+the names \coqdocvariable{n} and \coqdocvar{Hn}, respectively, in the second goal (as described
+in Section~\ref{sec:naming-subgoals}). Then, the first goal (the
+0-case) is discharged by simplifying the sum via two rewritings by
+\coqdoclemma{addn0} and \coqdoclemma{add0n} lemmas from the \coqdoclibrary{ssrnat} module and case-analysis
+on the assumption of the form \coqdocinductive{evenP} 1, which delivers the
+contradiction.
+
+
+The second goal is annoyingly trickier.
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{Hn} : \coqdocinductive{evenP} (\coqdocvariable{n} + 1 + \coqdocvariable{n}) \ensuremath{\rightarrow} \coqdocinductive{False}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocinductive{evenP} (\coqdocvariable{n}.+1 + 1 + \coqdocvariable{n}.+1) \ensuremath{\rightarrow} \coqdocinductive{False}
+
+\coqdocemptyline
+
+
+First, let us do some rewritings that make the hypothesis and the goal
+look alike.\footnote{Recall that \coqdocvariable{n}.+1 stands for the \emph{value}
+of the successor of \coqdocvariable{n},  whereas \coqdocvariable{n} + 1  is a function call, so
+the whole expression in the goal cannot be just trivially simplified
+by Coq's computation and requires some rewritings to take the
+convenient form.} \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{rewrite} \coqdocvar{addn1} \coqdocvar{addnS} \coqdocvar{addnC} !\coqdocvar{addnS}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{rewrite} \coqdocvar{addnC} \coqdocvar{addn1} \coqdocvar{addnS} \coqdoctac{in} \coqdocvar{Hn}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{Hn} : \coqdocinductive{evenP} (\coqdocvariable{n} + \coqdocvariable{n}).+1 \ensuremath{\rightarrow} \coqdocinductive{False}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocinductive{evenP} (\coqdocvariable{n} + \coqdocvariable{n}).+3 \ensuremath{\rightarrow} \coqdocinductive{False}
+
+\coqdocemptyline
+
+
+Now, even though the hypothesis \coqdocvar{Hn} and the goal are almost the same
+(modulo the natural ``(.+2)-orbit'' of the \coqdocinductive{evenP} predicate and some
+rewritings), we cannot take an advantage of it right away, and instead
+are required to case-analysed on the assumption of the form \coqdocinductive{evenP} (\coqdocvariable{n}
++ \coqdocvariable{n}).+3:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{case}=>// \coqdocvar{m} /\coqdocvar{eqP}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{Hn} : \coqdocinductive{evenP} (\coqdocvariable{n} + \coqdocvariable{n}).+1 \ensuremath{\rightarrow} \coqdocinductive{False}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{m} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+(\coqdocvariable{n} + \coqdocvariable{n}).+3 = \coqdocvariable{m}.+2 \ensuremath{\rightarrow} \coqdocinductive{evenP} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocinductive{False}
+
+\coqdocemptyline
+
+
+Only now we can make use of the rewriting lemma to ``strip off'' the
+constant summands from the equality in the assumption, so it could be
+employed for brushing the goal, which would then match the hypothesis
+exactly.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{rewrite} !\coqdocvar{eqSS}; \coqdoctac{move}/\coqdocvar{eqP}=><-.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Now, let us take a look at the proof of the same fact, but with the
+computable version of the predicate \coqdocdefinition{evenb}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{evenb\_contra} \coqdocvar{n}: \coqdocvar{evenb} (\coqdocvar{n} + 1 + \coqdocvar{n}) \ensuremath{\rightarrow} \coqdocvar{False}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{elim}: \coqdocvar{n}=>[|\coqdocvar{n} \coqdocvar{IH}] //.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{IH} : \coqdocdefinition{evenb} (\coqdocvariable{n} + 1 + \coqdocvariable{n}) \ensuremath{\rightarrow} \coqdocinductive{False}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocdefinition{evenb} (\coqdocvariable{n}.+1 + 1 + \coqdocvariable{n}.+1) \ensuremath{\rightarrow} \coqdocinductive{False}
+
+\coqdocemptyline
+
+
+In the case of zero, the proof by induction on \coqdocvariable{n} is automatically
+carried out by computation, since \coqdocdefinition{evenb} 1 = \coqdocconstructor{false}. The inductive
+step is not significantly more complicated, and it takes only two
+rewriting to get it into the shape, so the computation of \coqdocdefinition{evenb}
+could finish the proof.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{rewrite} \coqdocvar{addSn} \coqdocvar{addnS}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Sometimes, though, the value ``orbits'', which can be advantageous for
+the proofs involving \coqdocinductive{bool}-returning predicates, might require a bit
+trickier induction hypotheses than just the statement required to be
+proved. Let us compare the two proofs of the same fact, formulated
+with \coqdocinductive{evenP} and \coqdocdefinition{evenb}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{evenP\_plus} \coqdocvar{n} \coqdocvar{m} : \coqdocvar{evenP} \coqdocvar{n} \ensuremath{\rightarrow} \coqdocvar{evenP} \coqdocvar{m} \ensuremath{\rightarrow} \coqdocvar{evenP} (\coqdocvar{n} + \coqdocvar{m}).\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{elim}=>//\coqdocvar{n'}; \coqdoctac{\texttt{{first}}} \coqdoctac{by} \coqdoctac{move}=>->; \coqdoctac{rewrite} \coqdocvar{add0n}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{m} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{n'} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdockw{\ensuremath{\forall}} \coqdocvar{m0} : \coqdocinductive{nat},\coqdoceol
+\coqdocindent{1.50em}
+\coqdocvariable{n'} = \coqdocvar{m0}.+2 \ensuremath{\rightarrow}\coqdoceol
+\coqdocindent{1.50em}
+\coqdocinductive{evenP} \coqdocvar{m0} \ensuremath{\rightarrow} (\coqdocinductive{evenP} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocinductive{evenP} (\coqdocvar{m0} + \coqdocvariable{m})) \ensuremath{\rightarrow} \coqdocinductive{evenP} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocinductive{evenP} (\coqdocvariable{n'} + \coqdocvariable{m})
+
+\coqdocemptyline
+
+
+The induction here is on the predicate \coqdocinductive{evenP}, so the first case is
+discharged by rewriting.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow} \coqdocvar{m'}->\{\coqdocvar{n'}\} \coqdocvar{H1} \coqdocvar{H2} \coqdocvar{H3}; \coqdoctac{rewrite} \coqdocvar{addnC} !\coqdocvar{addnS} \coqdocvar{addnC}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{m} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{m'} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H1} : \coqdocinductive{evenP} \coqdocvariable{m'}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H2} : \coqdocinductive{evenP} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocinductive{evenP} (\coqdocvariable{m'} + \coqdocvariable{m})\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H3} : \coqdocinductive{evenP} \coqdocvariable{m}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocinductive{evenP} (\coqdocvariable{m'} + \coqdocvariable{m}).+2
+
+\coqdocemptyline
+
+
+In order to proceed with the inductive case, again a few rewritings
+are required.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{apply}: (\coqdocvar{EvenSS} \coqdocvar{\_} \coqdocvar{\_})=>//.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{m} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{m'} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H1} : \coqdocinductive{evenP} \coqdocvariable{m'}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H2} : \coqdocinductive{evenP} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocinductive{evenP} (\coqdocvariable{m'} + \coqdocvariable{m})\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H3} : \coqdocinductive{evenP} \coqdocvariable{m}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocinductive{evenP} (\coqdocvariable{m'} + \coqdocvariable{m})
+
+\coqdocemptyline
+
+
+The proof script is continued by explicitly applying the constructor
+\coqdocconstructor{EvenSS} of the \coqdocinductive{evenP} datatype. Notice the use of the wildcard
+underscores \index{wildcards} in the application of \coqdocconstructor{EvenSS}. Let us
+check its type:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{EvenSS}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocconstructor{EvenSS}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} \coqdocvariable{n} \coqdocvariable{m} : \coqdocinductive{nat}, \coqdocvariable{n} = \coqdocvariable{m}.+2 \ensuremath{\rightarrow} \coqdocinductive{evenP} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocinductive{evenP} \coqdocvariable{n}
+
+\coqdocemptyline
+
+
+By using the underscores, we allowed Coq to \textit{infer} the two necessary
+arguments for the \coqdocconstructor{EvenSS} constructor, namely, the values of \coqdocvariable{n} and
+\coqdocvariable{m}. The system was able to do it basing on the goal, which was
+reduced by applying it. After the simplification and automatic
+discharging the of the trivial subgoals (e.g., (\coqdocvariable{m'} + \coqdocvariable{m})+.2 = (\coqdocvariable{m'} +
+\coqdocvariable{m})+.2) via the \texttt{//} tactical, the only left obligation can
+be proved by applying the hypothesis \coqdocvar{H2}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{apply}: \coqdocvar{H2}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+In this particular case, the resulting proof was quite
+straightforward, thanks to the explicit equality \coqdocvariable{n} = \coqdocvariable{m}.+2 in the
+definition of the \coqdocconstructor{EvenSS} constructor.
+
+
+In the case of the boolean specification, though, the induction should
+be done on the natural argument itself, which makes the first attempt
+of the proof to be not entirely trivial.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{evenb\_plus} \coqdocvar{n} \coqdocvar{m} : \coqdocvar{evenb} \coqdocvar{n} \ensuremath{\rightarrow} \coqdocvar{evenb} \coqdocvar{m} \ensuremath{\rightarrow} \coqdocvar{evenb} (\coqdocvar{n} + \coqdocvar{m}).\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{elim}: \coqdocvar{n}=>[|\coqdocvar{n} \coqdocvar{Hn}]; \coqdoctac{\texttt{{first}}} \coqdoctac{by} \coqdoctac{rewrite} \coqdocvar{add0n}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\label{pg:evenbplus}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{m} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{Hn} : \coqdocdefinition{evenb} \coqdocvariable{n} \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocdefinition{evenb} (\coqdocvariable{n} + \coqdocvariable{m})\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocdefinition{evenb} \coqdocvariable{n}.+1 \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocdefinition{evenb} (\coqdocvariable{n}.+1 + \coqdocvariable{m})
+
+\coqdocemptyline
+
+
+The problem now is that, if we keep building the proof by induction on
+\coqdocvariable{n} or \coqdocvariable{m}, the induction hypothesis and the goal will be always
+``mismatched'' by one, which will prevent us finishing the proof using
+the hypothesis. 
+
+
+There are multiple ways to escape this vicious circle, and one of them
+is to \textit{generalize} the induction hypothesis. To do so, let us restart
+the proof.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Restart}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}: (\coqdocvar{leqnn} \coqdocvar{n}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{m} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocvariable{n} \ensuremath{\le} \coqdocvariable{n} \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvariable{n} \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocdefinition{evenb} (\coqdocvariable{n} + \coqdocvariable{m})
+
+\coqdocemptyline
+
+
+Now, we are going to proceed with the proof by \textit{selective} induction
+on \coqdocvariable{n}, such that some of its occurrences in the goal will be a
+subject of inductive reasoning (namely, the second one), and some
+others will be left generalized (that is, bound by a forall-quantified
+variable). We do so by using Ssreflect's tactics \coqdoctac{elim} with explicit
+\textit{occurrence selectors}.  \index{occurrence selectors}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{elim}: \coqdocvar{n} \{-2\}\coqdocvar{n}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{m} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdockw{\ensuremath{\forall}} \coqdocvariable{n} : \coqdocinductive{nat}, \coqdocvariable{n} \ensuremath{\le} 0 \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvariable{n} \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocdefinition{evenb} (\coqdocvariable{n} + \coqdocvariable{m})\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdockw{subgoal} 2 (\coqdocvar{ID} 860) \coqdockw{\texttt{\emph{is}}}:\coqdoceol
+\coqdocindent{0.50em}
+\coqdockw{\ensuremath{\forall}} \coqdocvariable{n} : \coqdocinductive{nat},\coqdoceol
+\coqdocindent{0.50em}
+(\coqdockw{\ensuremath{\forall}} \coqdocvar{n0} : \coqdocinductive{nat}, \coqdocvar{n0} \ensuremath{\le} \coqdocvariable{n} \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvar{n0} \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocdefinition{evenb} (\coqdocvar{n0} + \coqdocvariable{m})) \ensuremath{\rightarrow}\coqdoceol
+\coqdocindent{0.50em}
+\coqdockw{\ensuremath{\forall}} \coqdocvar{n0} : \coqdocinductive{nat}, \coqdocvar{n0} \ensuremath{\le} \coqdocvariable{n}.+1 \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvar{n0} \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocdefinition{evenb} (\coqdocvar{n0} + \coqdocvariable{m})
+
+\coqdocemptyline
+
+
+The same effect could be achieved by using \coqdoctac{elim}: \coqdocvariable{n} \{1 3 4\}\coqdocvariable{n}, that
+is, indicating which occurrences of \coqdocvariable{n} \textit{should} be generalized,
+instead of specifying, which ones should not (as we did by means of
+\{-2\}\coqdocvariable{n}).
+
+
+Now, the first goal can be solved by case-analysis on the top
+assumption (that is, \coqdocvariable{n}).
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+- \coqdoctac{by} \coqdoctac{case}=>//.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+For the second goal, we first move some of the assumptions to the context.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow}\coqdocvar{n} \coqdocvar{Hn}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{m} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{Hn} : \coqdockw{\ensuremath{\forall}} \coqdocvar{n0} : \coqdocinductive{nat}, \coqdocvar{n0} \ensuremath{\le} \coqdocvariable{n} \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvar{n0} \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocdefinition{evenb} (\coqdocvar{n0} + \coqdocvariable{m})\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdockw{\ensuremath{\forall}} \coqdocvar{n0} : \coqdocinductive{nat}, \coqdocvar{n0} \ensuremath{\le} \coqdocvariable{n}.+1 \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvar{n0} \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocdefinition{evenb} (\coqdocvar{n0} + \coqdocvariable{m})
+
+\coqdocemptyline
+
+
+We then perform the case-analysis on \coqdocvar{n0} in the goal, which results
+in two goals, one of which is automatically discharged.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{case}=>//.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{m} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{Hn} : \coqdockw{\ensuremath{\forall}} \coqdocvar{n0} : \coqdocinductive{nat}, \coqdocvar{n0} \ensuremath{\le} \coqdocvariable{n} \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvar{n0} \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocdefinition{evenb} (\coqdocvar{n0} + \coqdocvariable{m})\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdockw{\ensuremath{\forall}} \coqdocvar{n0} : \coqdocinductive{nat}, \coqdocvar{n0} < \coqdocvariable{n}.+1 \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvar{n0}.+1 \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocdefinition{evenb} (\coqdocvar{n0}.+1 + \coqdocvariable{m})
+
+\coqdocemptyline
+
+
+Doing \textit{one more} case analysis will add one more 1 to the induction
+variable \coqdocvar{n0}, which will bring us to the desired (.+2)-orbit.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{case}=>// \coqdocvar{n0}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{m} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{Hn} : \coqdockw{\ensuremath{\forall}} \coqdocvar{n0} : \coqdocinductive{nat}, \coqdocvar{n0} \ensuremath{\le} \coqdocvariable{n} \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvar{n0} \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocdefinition{evenb} (\coqdocvar{n0} + \coqdocvariable{m})\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{n0} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocvar{n0}.+1 < \coqdocvariable{n}.+1 \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvar{n0}.+2 \ensuremath{\rightarrow} \coqdocdefinition{evenb} \coqdocvariable{m} \ensuremath{\rightarrow} \coqdocdefinition{evenb} (\coqdocvar{n0}.+2 + \coqdocvariable{m})
+
+\coqdocemptyline
+
+
+The only thing left to do is to tweak the top assumption (by relaxing
+the inequality via the \coqdoclemma{ltnW} lemma), so we could apply the induction
+hypothesis \coqdocvar{Hn}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{move}/\coqdocvar{ltnW} /\coqdocvar{Hn}=>//.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+It is fair to notice that this proof was far less direct that one
+could expect, but it taught us an important trick---selective
+generalization of the induction hypothesis. In particular, by
+introducing an extra assumption \coqdocvariable{n} \ensuremath{\le} \coqdocvariable{n} in the beginning, we later
+exploited it, so we could apply the induction hypothesis, which was
+otherwise general enough to match the ultimate goal at the last step
+of the proof.
+
+
+
+
+
+
+\subsection{Eliminating assumptions with a custom induction hypothesis}
+
+
+
+
+The functions like \coqdocdefinition{evenb}, with specific value orbits, are not
+particularly uncommon, and it is useful to understand the key
+induction principles to reason about them. In particular, the above
+discussed proof could have been much more straightforward if we first
+proved a different induction principle \coqdoclemma{nat2\_ind} for natural numbers.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{nat2\_ind} (\coqdocvar{P}: \coqdocvar{nat} \ensuremath{\rightarrow} \coqdockw{Prop}): \coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{P} 0 \ensuremath{\rightarrow} \coqdocvar{P} 1 \ensuremath{\rightarrow} (\coqdockw{\ensuremath{\forall}} \coqdocvar{n}, \coqdocvar{P} \coqdocvar{n} \ensuremath{\rightarrow} \coqdocvar{P} (\coqdocvar{n}.+2)) \ensuremath{\rightarrow} \coqdockw{\ensuremath{\forall}} \coqdocvar{n}, \coqdocvar{P} \coqdocvar{n}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow} \coqdocvar{H0} \coqdocvar{H1} \coqdocvar{H} \coqdocvar{n}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{P} : \coqdocinductive{nat} \ensuremath{\rightarrow} \coqdockw{Prop}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H0} : \coqdocvariable{P} 0\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H1} : \coqdocvariable{P} 1\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H} : \coqdockw{\ensuremath{\forall}} \coqdocvariable{n} : \coqdocinductive{nat}, \coqdocvariable{P} \coqdocvariable{n} \ensuremath{\rightarrow} \coqdocvariable{P} \coqdocvariable{n}.+2\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocvariable{P} \coqdocvariable{n}
+
+\coqdocemptyline
+
+
+Unsurprisingly, the proof of this induction principle follows the same
+pattern as the proof of \coqdoclemma{evenb\_plus}---generalizing the hypothesis. In
+this particular case, we generalize it in the way that it would
+provide an ``impedance matcher'' between the 1-step ``default'' induction
+principle on natural numbers and the 2-step induction in the
+hypothesis \coqdocvar{H}. We show that for the proof it is sufficient to
+establish (\coqdocvariable{P} \coqdocvariable{n} \ensuremath{\land} \coqdocvariable{P} (\coqdocvariable{n}.+1)):
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdocvar{\texttt{\emph{suff}}}: (\coqdocvar{P} \coqdocvar{n} \ensuremath{\land} \coqdocvar{P} (\coqdocvar{n}.+1)) \coqdoctac{by} \coqdoctac{case}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The rest of the proof proceeds by the standard induction on \coqdocvariable{n}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{elim}: \coqdocvar{n}=>//\coqdocvar{n}; \coqdoctac{case}\ensuremath{\Rightarrow} \coqdocvar{H2} \coqdocvar{H3}; \coqdoctac{split}=>//; \coqdocvar{\texttt{{last}}} \coqdoctac{by} \coqdoctac{apply}: \coqdocvar{H}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Now, since the new induction principle \coqdoclemma{nat2\_ind} exactly matches the
+2-orbit, we can directly employ it for the proof of the previous result.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{evenb\_plus'} \coqdocvar{n} \coqdocvar{m} : \coqdocvar{evenb} \coqdocvar{n} \ensuremath{\rightarrow} \coqdocvar{evenb} \coqdocvar{m} \ensuremath{\rightarrow} \coqdocvar{evenb} (\coqdocvar{n} + \coqdocvar{m}).\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{elim}/\coqdocvar{nat2\_ind} : \coqdocvar{n}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Notice that we used the version of the \coqdoctac{elim} tactics with specific
+\textit{elimination view} \coqdoclemma{nat2\_ind}, different from the default one, which
+is possible using the view tactical \texttt{/}\ssrtl{/}\ssrt{elim}.
+\index{elimination view} In this sense, the ``standard induction''
+\coqdoctac{elim}: \coqdocvariable{n} would be equivalent to \coqdoctac{elim}/\coqdocvar{nat\_ind}: \coqdocvariable{n}.
+
+
+\begin{exercise}
+
+
+Let us define the binary division function \coqdocdefinition{div2} as follows.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Fixpoint} \coqdocvar{div2} (\coqdocvar{n}: \coqdocvar{nat}) := \coqdockw{if} \coqdocvar{n} \coqdockw{\texttt{\emph{is}}} \coqdocvar{p}.+2 \coqdockw{then} (\coqdocvar{div2} \coqdocvar{p}).+1 \coqdockw{else} 0.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Prove the following lemma directly, \textit{without} using the \coqdoclemma{nat2\_ind}
+induction principle.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{div2\_le} \coqdocvar{n}: \coqdocvar{div2} \coqdocvar{n} \ensuremath{\le} \coqdocvar{n}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\end{exercise}
+
+
+\section{Inductive predicates that are hard to avoid}
+
+
+\label{sec:cannot}
+
+
+Although formulating predicates as boolean functions is often
+preferable, it is not always trivial to do so. Sometimes, it is
+(seemingly) much simpler to come up with an inductive predicate, which
+explicitly witnesses the property of interest. As an example for such
+property, let us consider the notion of \textit{beautiful} and \textit{gorgeous}
+numbers, which we borrow from Pierce et al.'s electronic
+book~\cite{Pierce-al:SF} (Chapter \textsf{MoreInd}).
+
+
+\ssrd{beautiful}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocvar{beautiful} (\coqdocvar{n}: \coqdocvar{nat}) : \coqdockw{Prop} :=\coqdoceol
+\coqdocnoindent
+\ensuremath{|} \coqdocvar{b\_0} \coqdockw{\texttt{\emph{of}}} \coqdocvar{n} = 0\coqdoceol
+\coqdocnoindent
+\ensuremath{|} \coqdocvar{b\_3} \coqdockw{\texttt{\emph{of}}} \coqdocvar{n} = 3\coqdoceol
+\coqdocnoindent
+\ensuremath{|} \coqdocvar{b\_5} \coqdockw{\texttt{\emph{of}}} \coqdocvar{n} = 5\coqdoceol
+\coqdocnoindent
+\ensuremath{|} \coqdocvar{b\_sum} \coqdocvar{n'} \coqdocvar{m'} \coqdockw{\texttt{\emph{of}}} \coqdocvar{beautiful} \coqdocvar{n'} \& \coqdocvar{beautiful} \coqdocvar{m'} \& \coqdocvar{n} = \coqdocvar{n'} + \coqdocvar{m'}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The number is beautiful \index{beautiful numbers} if it's either
+0, 3, 5 or a sum of two beautiful numbers. Indeed, there are
+many ways to decompose some numbers into the sum $3 \times n + 5
+\times n$.\footnote{In fact, the solution of this simple Diophantine
+equation are all natural numbers, greater than $7$.} Encoding a
+function, which checks whether a number is beautiful or not, although
+not impossible, is not entirely trivial (and, in particular, it's not
+trivial to prove the correctness of such function with respect to the
+definition above). Therefore, if one decides to stick with the
+predicate definition, some operations become tedious, as, even for
+constants the property should be \textit{inferred} rather than proved:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Theorem} \coqdocvar{eight\_is\_beautiful}: \coqdocvar{beautiful} 8.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{apply}: (\coqdocvar{b\_sum} \coqdocvar{\_} 3 5)=>//; \coqdoctac{\texttt{{first}}} \coqdoctac{by} \coqdoctac{apply}: \coqdocvar{b\_3}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{apply} \coqdocvar{b\_5}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Theorem} \coqdocvar{b\_times2} \coqdocvar{n}: \coqdocvar{beautiful} \coqdocvar{n} \ensuremath{\rightarrow}  \coqdocvar{beautiful} (2 \ensuremath{\times} \coqdocvar{n}).\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{move}\ensuremath{\Rightarrow}\coqdocvar{H}; \coqdoctac{apply}: (\coqdocvar{b\_sum} \coqdocvar{\_} \coqdocvar{n} \coqdocvar{n})=>//; \coqdoctac{rewrite} \coqdocvar{mul2n} \coqdocvar{addnn}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+In particular, the negation proofs become much less straightforward
+than one would expect:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{one\_not\_beautiful} \coqdocvar{n}:  \coqdocvar{n} = 1 \ensuremath{\rightarrow} \textasciitilde \coqdocvar{beautiful} \coqdocvar{n}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow}\coqdocvar{E} \coqdocvar{H}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{n} : \coqdocinductive{nat}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{E} : \coqdocvariable{n} = 1\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H} : \coqdocinductive{beautiful} \coqdocvariable{n}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocinductive{False}
+
+\coqdocemptyline
+
+
+The way to infer the falsehood will be to proceed by induction on the
+hypothesis \coqdocvar{H}:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{elim}: \coqdocvar{H} \coqdocvar{E}\ensuremath{\Rightarrow}\coqdocvar{n'}; \coqdoctac{do}?[\coqdoctac{by} \coqdoctac{move}=>->].\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow} \coqdocvar{n1} \coqdocvar{m'} \coqdocvar{\_} \coqdocvar{H2} \coqdocvar{\_} \coqdocvar{H4} \ensuremath{\rightarrow} \{\coqdocvar{n'} \coqdocvar{n}\}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Notice how the assumptions \coqdocvariable{n'} and \coqdocvariable{n} are removed from the context
+(since we don't need them any more) by enumerating them using \{\coqdocvariable{n'} \coqdocvariable{n}\}
+notation.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{case}: \coqdocvar{n1} \coqdocvar{H2}=>// \coqdocvar{n'}\ensuremath{\Rightarrow} \coqdocvar{H3}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{case}: \coqdocvar{n'} \coqdocvar{H3}=>//; \coqdoctac{case}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\begin{exercise}
+
+
+Prove the following theorem about beautiful numbers.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{b\_timesm} \coqdocvar{n} \coqdocvar{m}: \coqdocvar{beautiful} \coqdocvar{n} \ensuremath{\rightarrow}  \coqdocvar{beautiful} (\coqdocvar{m} \ensuremath{\times} \coqdocvar{n}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\hint Choose wisely, what to build the induction on.
+
+
+\end{exercise}
+
+
+To practice with proofs by induction, let us consider yet another
+inductive predicate, borrowed from Pierce et al.'s course and defining
+which of natural numbers are \textit{gorgeous}.  \index{gorgeous numbers}
+
+
+\ssrd{gorgeous}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocvar{gorgeous} (\coqdocvar{n}: \coqdocvar{nat}) : \coqdockw{Prop} :=\coqdoceol
+\coqdocnoindent
+\ensuremath{|} \coqdocvar{g\_0} \coqdockw{\texttt{\emph{of}}} \coqdocvar{n} = 0\coqdoceol
+\coqdocnoindent
+\ensuremath{|} \coqdocvar{g\_plus3} \coqdocvar{m} \coqdockw{\texttt{\emph{of}}} \coqdocvar{gorgeous} \coqdocvar{m} \& \coqdocvar{n} = \coqdocvar{m} + 3\coqdoceol
+\coqdocnoindent
+\ensuremath{|} \coqdocvar{g\_plus5} \coqdocvar{m} \coqdockw{\texttt{\emph{of}}} \coqdocvar{gorgeous} \coqdocvar{m} \& \coqdocvar{n} = \coqdocvar{m} + 5.\coqdoceol
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\begin{exercise}\label{ex:gb}
+
+
+Prove by induction the following statements about gorgeous numbers:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{gorgeous\_plus13} \coqdocvar{n}: \coqdocvar{gorgeous} \coqdocvar{n} \ensuremath{\rightarrow} \coqdocvar{gorgeous} (\coqdocvar{n} + 13).\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{beautiful\_gorgeous} (\coqdocvar{n}: \coqdocvar{nat}) : \coqdocvar{beautiful} \coqdocvar{n} \ensuremath{\rightarrow} \coqdocvar{gorgeous} \coqdocvar{n}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{g\_times2} (\coqdocvar{n}: \coqdocvar{nat}): \coqdocvar{gorgeous} \coqdocvar{n} \ensuremath{\rightarrow} \coqdocvar{gorgeous} (\coqdocvar{n} \ensuremath{\times} 2).\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{gorgeous\_beautiful} (\coqdocvar{n}: \coqdocvar{nat}) : \coqdocvar{gorgeous} \coqdocvar{n} \ensuremath{\rightarrow} \coqdocvar{beautiful} \coqdocvar{n}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\noindent
+As usual, do not hesitate to use the \coqdockw{Search} utility for finding the
+necessary rewriting lemmas from the \coqdoclibrary{ssrnat} module.
+
+
+\end{exercise}
+
+
+
+
+
+
+\begin{exercise}[Gorgeous reflection]
+
+
+\index{Frobenius problem}
+\index{coin problem|see {Frobenius problem}}
+
+
+Gorgeous and beautiful numbers, defining, in fact, exactly the same
+subset of \coqdocinductive{nat} are a particular case of Frobenius coin problem, which
+asks for the largest integer amount of money, that cannot be obtained
+using only coins of specified
+denominations.\footnote{\url{http://en.wikipedia.org/wiki/Frobenius_problem}}
+In the case of \coqdocinductive{beautiful} and \coqdocinductive{gorgeous} numbers we have two
+denominations available, namely 3 and 5. An explicit formula
+exists for the case of only two denominations $n_1$ and $n_2$, which
+allows one to compute the Frobenius number as $g(n_1, n_2) = n_1
+\times n_2 - n_1 - n_2$. That said, for the case $n_1 = 3$ and $n_2 =
+5$ the Frobenius number is $7$, which means that all numbers greater
+or equal than $8$ are in fact beautiful and gorgeous (since the two
+are equivalent, as was established by Exercise~\ref{ex:gb}).
+
+
+In this exercise, we suggest the reader to prove that the efficient
+procedure of ``checking'' for gorgeousness is in fact correct. First,
+let us defined the following candidate function.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Fixpoint} \coqdocvar{gorgeous\_b} \coqdocvar{n} : \coqdocvar{bool} := \coqdockw{match} \coqdocvar{n} \coqdockw{with} \coqdoceol
+\coqdocindent{0.50em}
+\ensuremath{|} 1 \ensuremath{|} 2 \ensuremath{|} 4 \ensuremath{|} 7 \ensuremath{\Rightarrow} \coqdocvar{false}\coqdoceol
+\coqdocindent{0.50em}
+\ensuremath{|} \coqdocvar{\_} \ensuremath{\Rightarrow} \coqdocvar{true}\coqdoceol
+\coqdocindent{0.50em}
+\coqdockw{end}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\noindent
+The ultimate goal of this exercise is to prove the statement \coqdocabbreviation{reflect}
+(\coqdocinductive{gorgeous} \coqdocvariable{n}) (\coqdocdefinition{gorgeous\_b} \coqdocvariable{n}), which would mean that the two
+representations are equivalent. Let us divide the proof into two stages:
+
+
+
+\begin{itemize}
+\item  The first stage is proving that all numbers greater or equal than
+  8 are gorgeous. To prove this it might be useful to have the
+  following two facts established:
+
+\end{itemize}
+
+
+\hint Use the tactic \coqdoctac{constructor} \coqdocvar{i} to prove a goal, which is an
+ \coqdocvariable{n}-ary disjunction, which is satisfied if its \coqdocvar{i}th disjunct is
+ true.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{repr3} \coqdocvar{n} : \coqdocvar{n} \ensuremath{\ge} 8 \ensuremath{\rightarrow} \coqdoceol
+\coqdocindent{1.00em}
+\coqdoctac{\ensuremath{\exists}} \coqdocvar{k}, [\symbol{92}/ \coqdocvar{n} = 3 \ensuremath{\times} \coqdocvar{k} + 8, \coqdocvar{n} = 3 \ensuremath{\times} \coqdocvar{k} + 9 \ensuremath{|} \coqdocvar{n} = 3 \ensuremath{\times} \coqdocvar{k} + 10].\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{gorg3} \coqdocvar{n} : \coqdocvar{gorgeous} (3 \ensuremath{\times} \coqdocvar{n}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\noindent
+Next, we can establish by induction the following criteria using the
+lemmas \coqdoclemma{repr3} and \coqdoclemma{gorg3} in the subgoals of the proof.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{gorg\_criteria} \coqdocvar{n} : \coqdocvar{n} \ensuremath{\ge} 8 \ensuremath{\rightarrow} \coqdocvar{gorgeous} \coqdocvar{n}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\noindent
+This makes the proof of the following lemma trivial.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{gorg\_refl'} \coqdocvar{n}: \coqdocvar{n} \ensuremath{\ge} 8 \ensuremath{\rightarrow} \coqdocvar{reflect} (\coqdocvar{gorgeous} \coqdocvar{n}) \coqdocvar{true}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+
+\begin{itemize}
+\item  In the second stage of the proof of reflection, we will
+  need to prove four totally boring but unavoidable lemmas.
+
+\end{itemize}
+
+
+\hint The rewriting lemmas \coqdoclemma{addnC} and \coqdoclemma{eqSS} from the \coqdoclibrary{ssrnat}
+ module might be particularly useful here.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{not\_g1}: \~{}(\coqdocvar{gorgeous} 1).\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{not\_g2}: \~{}(\coqdocvar{gorgeous} 2).\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{not\_g4}: \~{}(\coqdocvar{gorgeous} 4).\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{not\_g7}: \~{}(\coqdocvar{gorgeous} 7).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\noindent We can finally provide prove the ultimate reflection
+predicate, relating \coqdocinductive{gorgeous} and \coqdocdefinition{gorgeous\_b}.
+
+
+\begin{coqdoccode}
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{gorg\_refl} \coqdocvar{n} : \coqdocvar{reflect} (\coqdocvar{gorgeous} \coqdocvar{n}) (\coqdocvar{gorgeous\_b} \coqdocvar{n}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\end{exercise}
+
+
+
+
+
+
+\begin{exercise}[Complete trees]
+
+
+In this exercise, we will consider a binary tree datatype and
+several functions on such trees.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocvar{tree} : \coqdockw{Set} :=\coqdoceol
+\coqdocnoindent
+\ensuremath{|} \coqdocvar{leaf}\coqdoceol
+\coqdocnoindent
+\ensuremath{|} \coqdocvar{node} \coqdockw{\texttt{\emph{of}}} \coqdocvar{tree} \& \coqdocvar{tree}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\noindent
+A tree is either a leaf or a node with two branches.
+The height of a leaf is zero, and height of a node is
+the maximum height of its branches plus one.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Fixpoint} \coqdocvar{height} \coqdocvar{t} :=\coqdoceol
+\coqdocnoindent
+\coqdockw{if} \coqdocvar{t} \coqdockw{\texttt{\emph{is}}} \coqdocvar{node} \coqdocvar{t1} \coqdocvar{t2} \coqdockw{then} (\coqdocvar{maxn} (\coqdocvar{height} \coqdocvar{t1}) (\coqdocvar{height} \coqdocvar{t2})).+1 \coqdockw{else} 0.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\noindent
+The number of leaves in a node is
+the total number of leaves in both its branches.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Fixpoint} \coqdocvar{leaves} \coqdocvar{t} :=\coqdoceol
+\coqdocnoindent
+\coqdockw{if} \coqdocvar{t} \coqdockw{\texttt{\emph{is}}} \coqdocvar{node} \coqdocvar{t1} \coqdocvar{t2} \coqdockw{then} \coqdocvar{leaves} \coqdocvar{t1} + \coqdocvar{leaves} \coqdocvar{t2} \coqdockw{else} 1.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\noindent
+A node is deemed a \textit{complete} tree if both its branches
+are complete and have the same height; a leaf is
+considered a complete tree.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Fixpoint} \coqdocvar{complete} \coqdocvar{t} :=\coqdoceol
+\coqdocnoindent
+\coqdockw{if} \coqdocvar{t} \coqdockw{\texttt{\emph{is}}} \coqdocvar{node} \coqdocvar{t1} \coqdocvar{t2} \coqdockw{then} \coqdocvar{complete} \coqdocvar{t1} \&\& \coqdocvar{complete} \coqdocvar{t2} \&\& (\coqdocvar{height} \coqdocvar{t1} == \coqdocvar{height} \coqdocvar{t2})\coqdoceol
+\coqdocnoindent
+\coqdockw{else} \coqdocvar{true}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\noindent
+We can now prove by induction that in a complete tree, the number of leaves
+is two to the power of the tree's height.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Theorem} \coqdocvar{complete\_leaves\_height} \coqdocvar{t} : \coqdocvar{complete} \coqdocvar{t} \ensuremath{\rightarrow} \coqdocvar{leaves} \coqdocvar{t} = 2 \^{} \coqdocvar{height} \coqdocvar{t}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\end{exercise}
+
+
+
+
+
+
+\section{Working with Ssreflect libraries}
+
+
+
+
+As it was mentioned in Chapter~\ref{ch:intro}, Ssreflect extension
+to Coq comes with an impressive number of libraries for reasoning
+about the large collection of discrete datatypes and structures,
+including but not limited to booleans, natural numbers, sequences,
+finite functions and sets, graphs, algebras, matrices, permutations
+etc. As discussed in this and previous chapters, all these libraries
+give preference to the computable functions rather than inductive
+predicates and leverage the reasoning via rewriting by equality. They
+also introduce a lot of notations that are worth being re-used in
+order to make the proof scripts tractable, yet concise.
+
+
+We would like to conclude this chapter with a short overview of a
+subset of the standard Ssreflect programming and naming policies,
+which will, hopefully, simplify the use of the libraries in a
+standalone development.
+
+
+\subsection{Notation and standard properties of algebraic operations}
+
+
+\label{sec:funprops}
+
+
+Ssreflect's module \coqdoclibrary{ssrbool} introduces convenient notation for
+predicate connectives, such as \ensuremath{\land} and \ensuremath{\lor}. In particular, multiple
+conjunctions and disjunctions are better to be written as [ \ensuremath{\land} \coqdocvariable{P1}, \coqdocvariable{P2}
+\& \coqdocvariable{P3}] and [ \ensuremath{\lor} \coqdocvariable{P1}, \coqdocvariable{P2} \ensuremath{|} \coqdocvariable{P3}], respectively, opposed to \coqdocvariable{P1} \ensuremath{\land} \coqdocvariable{P2} \ensuremath{\land}
+\coqdocvariable{P3} and \coqdocvariable{P1} \ensuremath{\lor} \coqdocvariable{P2} \ensuremath{\lor} \coqdocvariable{P3}. The specific notation makes it more
+convenient to use such connectives in the proofs that proceed by case
+analysis. Compare.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{conj4} \coqdocvar{P1} \coqdocvar{P2} \coqdocvar{P3} \coqdocvar{P4} : \coqdocvar{P1} \ensuremath{\land} \coqdocvar{P2} \ensuremath{\land} \coqdocvar{P3} \ensuremath{\land} \coqdocvar{P4} \ensuremath{\rightarrow} \coqdocvar{P3}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}. \coqdoctac{by} \coqdoctac{case}\ensuremath{\Rightarrow}\coqdocvar{p1} [\coqdocvar{p2}][\coqdocvar{p3}]. \coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{conj4'} \coqdocvar{P1} \coqdocvar{P2} \coqdocvar{P3} \coqdocvar{P4} : [ \ensuremath{\land} \coqdocvar{P1}, \coqdocvar{P2}, \coqdocvar{P3} \& \coqdocvar{P4}] \ensuremath{\rightarrow} \coqdocvar{P3}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}. \coqdoctac{by} \coqdoctac{case}. \coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+In the first case, we had progressively decompose binary
+right-associated conjunctions, which was done by means of the \textit{product
+naming} pattern [...],\footnote{The same introduction pattern works
+in fact for \emph{any} product type with one constructor, e.g., the
+existential quantification (see Chapter~\ref{ch:logic}).} so
+eventually all levels were ``peeled off'', and we got the necessary
+hypothesis \coqdocvar{p3}. In the second formulation, \coqdoclemma{conj4'}, the case
+analysis immediately decomposed the whole 4-conjunction into the
+separate assumptions.
+
+
+For functions of arity bigger than one, Ssreflect's module \coqdoclibrary{ssrfun}
+also introduces convenient notation, allowing them to be curried with
+respect to the second argument:\index{currying}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Locate} "\_ \^{}\~{} \_".\coqdoceol
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+"f \^{}\~{} y" := \coqdockw{fun} \coqdocvar{x} \ensuremath{\Rightarrow} \coqdocvar{f} \coqdocvar{x} \coqdocvar{y}     : \coqdocvar{fun\_scope}
+
+\coqdocemptyline
+
+
+For instance, this is how one can now express the partially applied
+function, which applies its argument to the list [:: 1; 2; 3]:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{map} \^{}\~{} [:: 1; 2; 3].\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{map}\^{}\~{} [:: 1; 2; 3]\coqdoceol
+\coqdocindent{2.50em}
+: (\coqdocinductive{nat} \ensuremath{\rightarrow} ?2919) \ensuremath{\rightarrow} \coqdoclibrary{seq} ?2919
+
+\coqdocemptyline
+
+
+Finally, \coqdoclibrary{ssrfun} defines a number of standard operator properties,
+such as commutativity, distributivity etc in the form of the
+correspondingly defined predicates: \coqdocvar{commutative}, \coqdocvar{right\_inverse}
+etc. For example, since we have now \coqdoclibrary{ssrbool} and \coqdoclibrary{ssrnat} imported,
+we can search for left-distributive operations defined in those two
+modules (such that they come with the proofs of the corresponding
+predicates):
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Search} \coqdocvar{\_} (\coqdocvar{left\_distributive} \coqdocvar{\_}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocvar{andb\_orl}  \coqdocdefinition{left\_distributive} \coqdocvar{andb} \coqdocvar{orb}\coqdoceol
+\coqdocnoindent
+\coqdocvar{orb\_andl}  \coqdocdefinition{left\_distributive} \coqdocvar{orb} \coqdocvar{andb}\coqdoceol
+\coqdocnoindent
+\coqdocvar{andb\_addl}  \coqdocdefinition{left\_distributive} \coqdocvar{andb} \coqdocvar{addb}\coqdoceol
+\coqdocnoindent
+\coqdocvar{addn\_maxl}  \coqdocdefinition{left\_distributive} \coqdocvar{addn} \coqdocdefinition{maxn}\coqdoceol
+\coqdocnoindent
+\coqdocvar{addn\_minl}  \coqdocdefinition{left\_distributive} \coqdocvar{addn} \coqdocvar{minn}\coqdoceol
+\coqdocnoindent
+...
+
+\coqdocemptyline
+
+
+A number of such properties is usually defined in a generic way, using
+Coq's canonical structures, which is a topic of
+Chapter~\ref{ch:depstruct}.
+
+
+\subsection{A library for lists}
+
+
+\label{sec:liblists}
+
+
+Lists, being one of the most basic inductive datatypes, are usually a
+subject of a lot of exercises for the fresh Coq hackers. Ssreflect's
+modules \coqdoclibrary{seq} \ssrm{seq} collect a number of the most commonly used
+procedures on lists and their properties, as well as some non-standard
+induction principles, drastically simplifying the reasoning.
+
+
+For instance, properties of some of the functions, such as \textit{list
+reversal} are simpler to prove not by the standard ``direct'' induction
+on the list structure, but rather iterating the list from its last
+element, for which the \coqdoclibrary{seq} library provides the necessary definition
+and induction principle:
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Fixpoint} \coqdocvar{rcons} \coqdocvar{s} \coqdocvar{z} := \coqdockw{if} \coqdocvar{s} \coqdockw{\texttt{\emph{is}}} \coqdocvar{x} :: \coqdocvar{s'} \coqdockw{then} \coqdocvar{x} :: \coqdocvar{rcons} \coqdocvar{s'} \coqdocvar{z} \coqdockw{else} [:: \coqdocvar{z}].
+
+\coqdocemptyline
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{last\_ind}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdoclemma{last\_ind}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} (\coqdocvar{T} : \coqdockw{Type}) (\coqdocvariable{P} : \coqdoclibrary{seq} \coqdocvar{T} \ensuremath{\rightarrow} \coqdockw{Type}),\coqdoceol
+\coqdocindent{3.50em}
+\coqdocvariable{P} [::] \ensuremath{\rightarrow}\coqdoceol
+\coqdocindent{3.50em}
+(\coqdockw{\ensuremath{\forall}} (\coqdocvar{s} : \coqdoclibrary{seq} \coqdocvar{T}) (\coqdocvar{x} : \coqdocvar{T}), \coqdocvariable{P} \coqdocvar{s} \ensuremath{\rightarrow} \coqdocvariable{P} (\coqdocvar{rcons} \coqdocvar{s} \coqdocvar{x})) \ensuremath{\rightarrow}\coqdoceol
+\coqdocindent{3.50em}
+\coqdockw{\ensuremath{\forall}} \coqdocvar{s} : \coqdoclibrary{seq} \coqdocvar{T}, \coqdocvariable{P} \coqdocvar{s}
+
+\coqdocemptyline
+
+
+That is, \coqdoclemma{last\_ind} is very similar to the standard list induction
+principle \coqdocvar{list\_ind}, except for the fact that its ``induction step'' is
+defined with respect to the \coqdocvar{rcons} function, rather than the list's
+constructor \coqdocvar{cons}. We encourage the reader to check the proof of the
+list function properties, such as \coqdocvar{nth\_rev} or \coqdocvar{foldl\_rev} to see the
+reasoning by the \coqdoclemma{last\_ind} induction principle.
+
+
+\index{Dirichlet's box principle}
+\index{pigeonhole principle|see{Dirichlet's box principle}}
+
+
+To demonstrate the power of the library for reasoning with lists, let
+us prove the following property, known as \textit{Dirichlet's box principle}
+(sometimes also referred to as \textit{pigeonhole principle}), the
+formulation of which we have borrowed from
+Chapter~\textsc{MoreLogic} of Pierce et al.'s
+course~\cite{Pierce-al:SF}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Variable} \coqdocvar{A} : \coqdocvar{eqType}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Fixpoint} \coqdocvar{has\_repeats} (\coqdocvar{xs} : \coqdocvar{seq} \coqdocvar{A}) :=\coqdoceol
+\coqdocindent{1.00em}
+\coqdockw{if} \coqdocvar{xs} \coqdockw{\texttt{\emph{is}}} \coqdocvar{x} :: \coqdocvar{xs'} \coqdockw{then} (\coqdocvar{x} \symbol{92}\coqdoctac{in} \coqdocvar{xs'}) || \coqdocvar{has\_repeats} \coqdocvar{xs'} \coqdockw{else} \coqdocvar{false}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The property \coqdocdefinition{has\_repeats} is stated over the lists with elements that
+have decidable equality, which we have considered in
+Section~\ref{sec:eqrefl}. Following the computational approach, it
+is a boolean function, which makes use of the boolean disjunction ||
+and Ssreflect's element inclusion predicate \symbol{92}\coqdoctac{in}, which is defined in
+the module \coqdoclibrary{seq}.
+
+
+The following lemma states that for two lists \coqdocvariable{xs1} and \coqdocvariable{xs2}, is the
+size \coqdocvariable{xs2} is strictly smaller than the size of \coqdocvariable{xs1}, but
+nevertheless \coqdocvariable{xs1} as a set is a subset of \coqdocvariable{xs2} then there ought to
+be repetitions in \coqdocvariable{xs1}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Theorem} \coqdocvar{dirichlet} \coqdocvar{xs1} \coqdocvar{xs2} :\coqdoceol
+\coqdocindent{4.00em}
+\coqdocvar{size} \coqdocvar{xs2} < \coqdocvar{size} \coqdocvar{xs1} \ensuremath{\rightarrow} \{\coqdocvar{subset} \coqdocvar{xs1} \ensuremath{\le} \coqdocvar{xs2}\} \ensuremath{\rightarrow} \coqdocvar{has\_repeats} \coqdocvar{xs1}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Let us go through the proof of this statement, as it is interesting by
+itself in its intensive use of Ssreflect's library lemmas from the
+\coqdoclibrary{seq} module.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+First, the proof scripts initiates the induction on the structure of
+the first, ``longer'', list \coqdocvariable{xs1}, simplifying and moving to the context
+some hypotheses in the ``step'' case (as the \coqdocvar{nil}-case is proved
+automatically).
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{elim}: \coqdocvar{xs1} \coqdocvar{xs2}=>[|\coqdocvar{x} \coqdocvar{xs1} \coqdocvar{IH}] \coqdocvar{xs2} //= \coqdocvar{H1} \coqdocvar{H2}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvar{x} : \coqdocaxiom{A}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{xs1} : \coqdoclibrary{seq} \coqdocaxiom{A}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{IH} : \coqdockw{\ensuremath{\forall}} \coqdocvariable{xs2} : \coqdoclibrary{seq} \coqdocaxiom{A},\coqdoceol
+\coqdocindent{3.50em}
+\coqdocdefinition{size} \coqdocvariable{xs2} < \coqdocdefinition{size} \coqdocvariable{xs1} \ensuremath{\rightarrow} \{\coqdocvar{subset} \coqdocvariable{xs1} \ensuremath{\le} \coqdocvariable{xs2}\} \ensuremath{\rightarrow} \coqdocdefinition{has\_repeats} \coqdocvariable{xs1}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{xs2} : \coqdoclibrary{seq} \coqdocaxiom{A}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H1} : \coqdocdefinition{size} \coqdocvariable{xs2} < (\coqdocdefinition{size} \coqdocvariable{xs1}).+1\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H2} : \{\coqdocvar{subset} \coqdocvar{x} :: \coqdocvariable{xs1} \ensuremath{\le} \coqdocvariable{xs2}\}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+(\coqdocvar{x} \symbol{92}\coqdoctac{in} \coqdocvariable{xs1}) || \coqdocdefinition{has\_repeats} \coqdocvariable{xs1}
+
+\coqdocemptyline
+
+
+Next, exactly in the case of a paper-and-pencil proof, we perform the
+case-analysis on the fact (\coqdocvar{x} \symbol{92}\coqdoctac{in} \coqdocvariable{xs1}), i.e., whether the ``head''
+element \coqdocvar{x} occurs in the remainder of the list \coqdocvariable{xs1}. If it is,
+the proof is trivial and automatically discharged.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{case} \coqdocvar{H3}: (\coqdocvar{x} \symbol{92}\coqdoctac{in} \coqdocvar{xs1}) \ensuremath{\Rightarrow} //=.\coqdoceol
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+...\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H3} : (\coqdocvar{x} \symbol{92}\coqdoctac{in} \coqdocvariable{xs1}) = \coqdocconstructor{false}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocdefinition{has\_repeats} \coqdocvariable{xs1}
+
+\coqdocemptyline
+
+
+Therefore, we are considering now the situation when \coqdocvar{x} was the
+\textit{only} representative of its class in the original ``long'' list.  For
+the further inductive reasoning, we will have to remove the same
+element from the ``shorter'' list \coqdocvariable{xs2}, which is done using the
+following filtering operation (\coqdocdefinition{pred1} \coqdocvar{x} checks every element for
+equality to \coqdocvar{x} and \coqdocdefinition{predC} constructs the negation of the passed
+predicate), resulting in the list \coqdocvar{xs2'}, to which the induction
+hypothesis is applied, resulting in two goals
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{pose} \coqdocvar{xs2'} := \coqdocvar{filter} (\coqdocvar{predC} (\coqdocvar{pred1} \coqdocvar{x})) \coqdocvar{xs2}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{apply}: (\coqdocvar{IH} \coqdocvar{xs2'}); \coqdocvar{\texttt{{last}}} \coqdoctac{\texttt{{first}}}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+...\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H2} : \{\coqdocvar{subset} \coqdocvar{x} :: \coqdocvariable{xs1} \ensuremath{\le} \coqdocvariable{xs2}\}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H3} : (\coqdocvar{x} \symbol{92}\coqdoctac{in} \coqdocvariable{xs1}) = \coqdocconstructor{false}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{xs2'} := [\coqdoclibrary{seq} \coqdocvar{x} \ensuremath{\leftarrow} \coqdocvariable{xs2} \ensuremath{|} (\coqdocdefinition{predC} (\coqdocdefinition{pred1} \coqdocvar{x})) \coqdocvar{x0}] : \coqdoclibrary{seq} \coqdocaxiom{A}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\{\coqdocvar{subset} \coqdocvariable{xs1} \ensuremath{\le} \coqdocvar{xs2'}\}\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdockw{subgoal} 2 (\coqdocvar{ID} 5716) \coqdockw{\texttt{\emph{is}}}:\coqdoceol
+\coqdocindent{0.50em}
+\coqdocdefinition{size} \coqdocvar{xs2'} < \coqdocdefinition{size} \coqdocvariable{xs1}
+
+\coqdocemptyline
+
+
+The first goal is discharged by first ``de-sugaring'' the \{\coqdocvar{subset} ...\}
+notation and moving a universally-quantified variable to the top, and
+then performing a number of rewriting with the lemmas from the
+\coqdoclibrary{seq} library, such as \coqdocdefinition{inE} and \coqdoclemma{mem\_filter} (check their types!).
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+- \coqdoctac{move}\ensuremath{\Rightarrow}\coqdocvar{y} \coqdocvar{H4}; \coqdoctac{move}: (\coqdocvar{H2} \coqdocvar{y}); \coqdoctac{rewrite} \coqdocvar{inE} \coqdocvar{H4} \coqdocvar{orbT} \coqdocvar{mem\_filter} /=.\coqdoceol
+\coqdocindent{1.00em}
+\coqdoctac{by} \coqdoctac{move} \ensuremath{\Rightarrow} \ensuremath{\rightarrow} //; \coqdoctac{case}: \coqdocvar{eqP} \coqdocvar{H3} \coqdocvar{H4} \ensuremath{\Rightarrow} // ->->.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The second goal requires to prove the inequality, which states that
+after removal of \coqdocvar{x} from \coqdocvariable{xs2}, the length of the resulting list
+\coqdocvariable{xs2} is smaller than the length of \coqdocvariable{xs1}. This is accomplished by the
+transitivity of < and several rewritings by lemmas from the \coqdoclibrary{seq}
+and \coqdoclibrary{ssrnat} modules, mostly targeted to relate the \coqdocdefinition{filter} function
+and the size of the resulting list.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{rewrite} \coqdocvar{ltnS} \coqdoctac{in} \coqdocvar{H1}; \coqdoctac{apply}: \coqdocvar{leq\_trans} \coqdocvar{H1}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{rewrite} -(\coqdocvar{count\_predC} (\coqdocvar{pred1} \coqdocvar{x}) \coqdocvar{xs2}) -\coqdocvar{addn1} \coqdocvar{addnC}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{rewrite} /\coqdocvar{xs2'} \coqdocvar{size\_filter} \coqdocvar{leq\_add2r} -\coqdocvar{has\_count}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+...\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H2} : \{\coqdocvar{subset} \coqdocvar{x} :: \coqdocvariable{xs1} \ensuremath{\le} \coqdocvariable{xs2}\}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H3} : (\coqdocvar{x} \symbol{92}\coqdoctac{in} \coqdocvariable{xs1}) = \coqdocconstructor{false}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{xs2'} := [\coqdoclibrary{seq} \coqdocvar{x} \ensuremath{\leftarrow} \coqdocvariable{xs2} \ensuremath{|} (\coqdocdefinition{predC} (\coqdocdefinition{pred1} \coqdocvar{x})) \coqdocvar{x0}] : \coqdoclibrary{seq} \coqdocaxiom{A}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocvar{has} (\coqdocdefinition{pred1} \coqdocvar{x}) \coqdocvariable{xs2}
+
+\coqdocemptyline
+
+
+The remaining goal can be proved by \textit{reflecting} the boolean
+proposition \coqdocvar{has} into its \coqdockw{Prop}-counterpart \coqdocvar{exists2} from Ssreflect
+library. The switch is done using the view \coqdoclemma{hasP}, and the proof is
+completed by supplying explicitly the existential witness~\coqdocvar{x}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{apply}/\coqdocvar{hasP}; \coqdoctac{\ensuremath{\exists}} \coqdocvar{x}=>//=; \coqdoctac{apply}: \coqdocvar{H2}; \coqdoctac{rewrite} \coqdocvar{inE} \coqdocvar{eq\_refl}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}

@@ -1,0 +1,2390 @@
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+
+\chapter{Propositional Logic}
+\label{ch:logic}
+ 
+
+
+
+In the previous chapter we had an opportunity to explore Coq as a
+functional programming language and learn how to define inductive
+datatypes and programs that operate with them, implementing the latter
+ones directly or using the automatically-generated recursion
+combinators. Importantly, most of the values that we met until this
+moment, inhabited the types, which were defined as elements of the
+sort \coqdockw{Set}. The types \coqdocvar{unit}, \coqdocvar{empty}, \coqdocvar{nat}, \coqdocvar{nat} \ensuremath{\times} \coqdocvar{unit} etc. are
+good examples of \textit{first-order} types inhabiting the sort \coqdockw{Set} and,
+therefore, contributing to the analogy between sets and first-order
+types, which we explored previously.  In this chapter, we will be
+working with a new kind of entities, incorporated by Coq:
+\textit{propositions}.
+
+
+\section{Propositions and the \texorpdfstring{\protect\coqdockw{Prop}}{Prop} sort}
+
+
+\label{sec:propsort}
+
+
+In Coq, propositions bear a lot of similarities with types,
+demonstrated in Chapter~\ref{ch:funprog}, and inhabit a separate
+sort \coqdockw{Prop}, similarly to how first-order types inhabit
+\coqdockw{Set}.\footnote{In the Coq community, the datatypes of  \coqdockw{Prop} 
+sort are usually referred to as \emph{inductive
+predicates}.\index{inductive predicates}} The ``values'' that have
+elements of \coqdockw{Prop} as their types are usually referred to as \textit{proofs}
+or \textit{proof terms}, the naming convention which stems out of the idea of
+\index{Curry-Howard correspondence} \emph{Curry-Howard
+Correspondence}~\cite{Curry:34,Howard:80}.\footnote{\url{http://en.wikipedia.org/wiki/Curry-Howard_correspondence}}
+Sometimes, the Curry-Howard Correspondence is paraphrased as
+\textit{proofs-as-programs}, which is truly illuminating when it comes to the
+intuition behind the formal proof construction in Coq, which, in fact,
+is just programming in disguise.
+
+
+\index{Calculus of Inductive Constructions}
+\index{CIC|see {Calculus~of~Inductive~Constructions}}
+\index{intuitionistic type theory}
+\index{Martin-\loef's type theory|see {intuitionistic type theory}}
+\index{Prop sort@\texttt{Prop} sort}
+
+
+The \textit{Calculus of Inductive Constructions}
+(CIC)~\cite{Bertot-Casteran:BOOK,Coquand-Huet:IC88} a logical
+foundation of Coq, similarly to its close relative, Martin-\loef's
+\textit{Intuitionistic Type Theory} \cite{Martin-Loef:84}, considers proofs
+to be just regular values of the ``programming'' language it
+defines. Therefore, the process of constructing proofs in Coq is
+very similar to the process of writing programs. Intuitively, when
+one asks a question ``Whether the proposition \coqdocaxiom{P} is \textit{true}?'', what is
+meant in fact is ``Whether the \textit{proof} of \coqdocaxiom{P} can be
+constructed?''. This is an unusual twist, which is crucial for
+understanding the concept of the ``truth'' and proving propositions in
+CIC (and, equivalently, in Coq), so we specifically outline it here in
+the form of a motto:
+
+
+
+\begin{center}
+Only those propositions are considered to be \emph{true}, which are
+provable \emph{constructively},\\ i.e., by providing an \emph{explicit} proof term,
+that inhabits them.
+\end{center}
+
+
+
+This formulation of ``truth'' is somewhat surprising at the first
+encounter, comparing to classical propositional logic, where the
+propositions are considered to be true simply if they are tautologies
+(i.e., reduce to the boolean value \coqdocvar{true} for all possible
+combinations of their free variables' values), therefore leading to
+the common proof method in classical propositional logic: truth
+tables.  While the truth table methodology immediately delivers the
+recipe to prove propositions without quantifiers \textit{automatically} (that
+is, just by checking the corresponding truth tables), it does not
+quite scale when it comes to the higher-order propositions (i.e.,
+quantifying over predicates) as well as of propositions quantifying
+over elements of arbitrary domains. For instance, the following
+proposition, in which the reader can recognize the induction principle
+over natural numbers, cannot be formulated in the zeroth- or
+first-order propositional logic (and, in fact, in \textit{any} propositional
+logic):
+
+
+
+\begin{center}
+For any predicate $P$, if $P(0)$ holds, and for any $m$, $P(m)$
+implies $P(m + 1)$, \\
+then for any $n$, $P(n)$ holds.
+\end{center}
+
+
+
+The statement above is \textit{second-order} as it binds a first-order
+predicate by means of universal quantification, which makes it belong
+to the corresponding second-order logic (which is not even
+propositional, as it quantifies over arbitrary natural values, not
+just propositions). Higher-order logics~\cite{Church:JSL40} are
+known to be undecidable in general, and, therefore, there is no
+automatic way to reduce an arbitrary second-order formula to one of
+the two values: \coqdocvar{true} or \coqdocvar{false}.
+
+
+CIC as a logic is expressive enough to accommodate propositions with
+quantifications of an arbitrary order and over arbitrary values. On
+one hand, it makes it an extremely powerful tool to state almost any
+proposition of interest in modern mathematics or computer science. On
+the other hand, proving such statements (i.e., constructing their
+proof terms), will require human assistance, in the same way the
+``paper-and-pencil'' proofs are constructed in classical
+mathematics. However, unlike the paper-and-pencil proofs, proofs
+constructed in Coq are a subject of immediate \textit{automated} check, since
+they are just programs to be verified for well-typedness. Therefore,
+the process of proof construction in Coq is \textit{interactive} and assumes
+the constant interoperation between a human prover, who constructs a
+proof term for a proposition (i.e., writes a program), and Coq, the
+proof assistant, which carries out the task of \textit{verifying} the proof
+(i.e., type-checking the program). This largely defines our agenda for
+the rest of this course: we are going to see how to \textit{prove} logical
+statements by means of writing \textit{programs}, that have the types
+corresponding to these statements.
+
+
+In the rest of this chapter we will focus only on the capability of
+Coq as a formal system allowing one to reason about propositions,
+leaving reasoning about values aside till the next chapter. It is
+worth noticing that a fragment of Coq, which deals with the sort
+\coqdockw{Prop}, accommodating all the propositions, and allows the programmer
+to make statements with propositions, corresponds to the logical
+calculus, known as System~$F_{\omega}$\index{System $F_{\omega}$}
+(see Chapter 30 of~\cite{Pierce:BOOK02}) \index{System $F$}
+extending System $F$~\cite{Reynolds:SP74,Girard:PhD}, mentioned in
+Chapter~\ref{ch:funprog}. Unlike System $F$, which introduces
+polymorphic types, and, equivalently, first-order propositions that
+quantify over other propositions, System~$F_{\omega}$ allows one to
+quantify as well over \textit{type operators}, which can be also thought of
+as higher-order propositions.
+
+
+\section{The truth and the falsehood in Coq}
+
+
+
+
+We start our acquaintance with propositional logic in Coq by
+demonstrating how the two simplest propositions, the truth and the
+falsehood, are encoded. Once again, let us remember that, unlike in
+propositional logic, in Coq these two are \textit{not} the only possible
+propositional \textit{values}, and soon we will see how a wide range of
+propositions different from mere truth or falsehood are
+implemented. From now on, we will be always including to the
+development the standard Ssreflect's module \coqdoclibrary{ssreflect},
+\ssrm{ssreflect} which imports some necessary machinery for dealing
+with propositions and proofs.
+
+
+ \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{\textsf{{From}}} \coqdocvar{mathcomp} \coqdockw{Require} \coqdockw{Import} \coqdocvar{ssreflect}.\coqdoceol
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The truth is represented in Coq as a datatype of sort \coqdockw{Prop} with just
+one constructor, taking no arguments:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{True}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocinductive{True} : \coqdockw{Prop} :=  \coqdocconstructor{I} : \coqdocinductive{True}
+
+\coqdocemptyline
+
+
+\ssrd{True}
+
+
+Such simplicity makes it trivial to construct an instance of the
+\coqdocinductive{True} proposition:\footnote{In the context of propositional logic, we
+will be using the words ``type'' and ``proposition'' interchangeably
+without additional specification when it's clear from the context.}
+Now we can prove the following proposition in Coq's embedded
+propositional logic, essentially meaning that \coqdocinductive{True} is provable.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Theorem} \coqdocvar{true\_is\_true}: \coqdocvar{True}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+1 \coqdockw{subgoals}, \coqdockw{subgoal} 1 (\coqdocvar{ID} 1)\coqdoceol
+\coqdocindent{1.00em}
+\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocinductive{True}
+
+\coqdocemptyline
+
+
+The command \coqdockw{Theorem} \ccom{Theorem} serves two purposes. First, similarly to the
+command \coqdockw{Definition}, it defines a named entity, which is not
+necessarily a proposition. In this case the name is
+\coqdoclemma{true\_is\_true}. Next, similarly to \coqdockw{Definition}, there might follow a
+list of parameters, which is empty in this example. Finally, after the
+colon : there is a type of the defined value, which in this case it
+\coqdocinductive{True}. With this respect there is no difference between \coqdockw{Theorem} and
+\coqdockw{Definition}. However, unlike \coqdockw{Definition}, \coqdockw{Theorem} doesn't require
+one to provide the expression of the corresponding type right
+away. Instead, the \textit{interactive proof mode} \index{interactive proof mode}  
+is activated, so the proof term could be constructed
+incrementally. The process of the gradual proof construction is what
+makes Coq to be a \textit{interactive proof assistant}, in addition to being
+already a programming language with dependent types.
+
+
+Although not necessary, it is considered a good programming practice
+in Coq to start any interactive proof with the Coq's command
+\ccom{Proof} \coqdockw{Proof}, which makes the final scripts easier to read
+and improves the general proof layout.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\index{goal} In the interactive proof mode, the \coqdocvar{goals} display
+shows a \textit{goal} of the proof---the type of the value to be constructed
+(\coqdocinductive{True} in this case), which is located below the double line. Above
+the line one can usually see the context of \textit{assumptions}, which can
+be used in the \index{assumption} process of constructing the
+proof. Currently, the assumption context is empty, as the theorem we
+stated does not make any and ventures to prove \coqdocinductive{True} out of thin
+air. Fortunately, this is quite easy to do, as from the formulation of
+the \coqdocinductive{True} type we already know that it is inhabited by its only
+constructor \coqdocconstructor{I}. The next line proved the \textit{exact} value of the type of
+the goal.\ttac{exact:}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{exact}: \coqdocvar{I}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+This completes the proof, as indicated by the Proof General's
+\texttt{*response*} display:
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocvar{No} \coqdocvar{more} \coqdockw{subgoals}.\coqdoceol
+\coqdocnoindent
+(\coqdoctac{dependent} \coqdocvar{evars}:)
+
+\coqdocemptyline
+
+
+The only thing left to complete the proof is to inform Coq that now
+the theorem \coqdoclemma{true\_is\_true} is proved, which is achieved by typing the
+command \ccom{Qed} \coqdockw{Qed}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+In fact, typing \coqdockw{Qed} invokes a series of additional checks, which
+ensure the well-formedness of the constructed proof term. Although the
+proof of \coqdoclemma{true\_is\_true} is obviously valid, in general, there is a
+number of proof term properties to be checked \textit{a posteriori} and
+particularly essential in the case of proofs about infinite objects,
+which we do not cover in these course (see Chapter~13
+of~\cite{Bertot-Casteran:BOOK} for a detailed discussion on such
+proofs).
+
+
+So, our first theorem is proved. As it was hinted previously, it could
+have been stated even more concisely, formulated as a mere definition,
+and proved by means of providing a corresponding value, without the
+need to enter the proof mode:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{true\_is\_true'}: \coqdocvar{True} := \coqdocvar{I}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Although this is a valid way to prove statements in Coq, it is not as
+convenient as the interactive proof mode, when it comes to
+construction of large proofs, arising from complicated
+statements. This is why, when it comes to proving propositions, we
+will prefer the interactive proof mode to the ``vanilla'' program
+definition. It is worth noticing, though, that even though the process
+of proof construction in Coq usually looks more like writing a
+\textit{script}, consisting from a number of commands (which are called
+\textit{tactics} in Coq jargon),\index{Coq/Ssreflect
+tactics}\index{tactics} \index{tactics|seealso {Coq/Ssreflect
+tactics}} the result of such script, given that it eliminates all of
+the goals, is a valid well-typed Coq program. In comparison, in some
+other dependently-typed frameworks (e.g., in Agda\index{Agda}), the
+construction of proof terms does not obscure the fact that what is
+being constructed is a program, so the resulting interactive proof
+process is formulated as ``filling the holes'' in a program (i.e., a
+proof-term), which is being gradually refined. We step away from the
+discussion on which of these two views to the proof term construction
+is more appropriate.
+
+
+There is one more important difference between values defined as
+\coqdockw{Definition}s \ccom{Definition}\ccom{Theorem} and \coqdockw{Theorem}s. While
+both define what in fact is a proof terms for the declared type, the
+value bound by \coqdockw{Definition} is \textit{transparent}: it can be executed by
+means of unfolding and subsequent evaluation of its body. In contrast,
+a proof term bound by means of \coqdockw{Theorem} is \textit{opaque}, which means that
+its body cannot be evaluated and serves only one purpose: establish
+the fact that the corresponding type (the theorem's statement) is
+inhabited, and, therefore is true.  This distinction between
+definitions and theorems arises from the notion of \textit{proof
+irrelevance}, which, informally, states that (ideally) one shouldn't
+be able to distinguish between two proofs of the same statement as
+long as they both are valid.\footnote{Although, in fact, proof terms
+in Coq can be very well distinguished.} Conversely, the programs
+(that is, what is created using the \coqdockw{Definition} command) are
+typically of interest by themselves, not only because of the type they
+return.
+
+
+The difference between the two definitions of the truth's validity,
+which we have just constructed, can be demonstrated by means of the
+\coqdockw{Eval} command.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Eval} \coqdoctac{compute} \coqdoctac{in} \coqdocvar{true\_is\_true}.\coqdoceol
+\end{coqdoccode}
+ = \coqdoclemma{true\_is\_true} : \coqdocinductive{True}
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Eval} \coqdoctac{compute} \coqdoctac{in} \coqdocvar{true\_is\_true'}.\coqdoceol
+\end{coqdoccode}
+ = \coqdocconstructor{I} : \coqdocinductive{True}
+
+
+As we can see now, the theorem is evaluated to itself, whereas the
+definition evaluates to it body, i.e., the value of the constructor
+\coqdocconstructor{I}.  
+
+
+
+
+
+
+A more practical analogy for the above distinction can be drawn if one
+will think of \coqdockw{Definition}s as of mere functions, packaged into
+libraries and intended to be used by third-party clients. In the same
+spirit, one can think of \coqdockw{Theorem}s as of facts that need to be
+checked only once when established, so no one would bother to re-prove
+them again, knowing that they are valid, and just appeal to their
+types (statement) without exploring the proof.\footnote{While we
+consider this to be a valid analogy to the mathematical community
+functions, it is only true in spirit. In the real life, the statements
+proved once, are usually re-proved by students for didactical reasons,
+in order to understand the proof principles and be able to produce
+other proofs. Furthermore, the history of mathematics witnessed a
+number of proofs that have been later invalidated. Luckily, the
+mechanically-checked proofs are usually not a subject of this
+problem.} This is similar to what is happening during the oral
+examinations on mathematical disciplines: a student is supposed to
+remember the statements of theorems from the \textit{previous} courses and
+semesters, but is not expected to reproduce their proofs.
+
+
+At this point, an attentive reader can notice that the definition of
+\coqdocinductive{True} in Coq is strikingly similar to the definition of the type
+\coqdocvar{unit} from Chapter~\ref{ch:funprog}. This is a fair observation,
+which brings us again to the Curry-Howard analogy, and makes it
+possible to claim that the trivial truth proposition is isomorphic to
+the \coqdocvar{unit} type from functional programming. Indeed, both have just
+one way to be constructed and can be constructed in any context, as
+their single constructor does not require any arguments.
+
+
+Thinking by analogy, one can now guess how the falsehood can be encoded.
+
+
+\ssrd{False}
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{False}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocinductive{False} : \coqdockw{Prop} :=  
+
+\coqdocemptyline
+
+
+Unsurprisingly, the proposition \coqdocinductive{False} in Coq is just a Curry-Howard
+counterpart of the type \coqdocvar{empty}, which we have constructed in
+Chapter~\ref{ch:funprog}. Moreover, the same intuition that was
+applicable to \coqdocvar{empty}'s recursion principle (``anything can be produced
+given an element of an empty set''), is applicable to reasoning by
+induction with the \coqdocinductive{False} proposition:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{False\_ind}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{False\_ind}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} \coqdocaxiom{P} : \coqdockw{Prop}, \coqdocinductive{False} \ensuremath{\rightarrow} \coqdocaxiom{P}
+
+\coqdocemptyline
+
+
+That is, \textit{any} proposition can be derived from the falsehood by means
+of implication.\footnote{In light of the Curry-Howard analogy, at
+\index{Curry-Howard correspondence} this moment it shouldn't come as a
+surprise that Coq uses the arrow notation \texttt{->} both for
+function types and for propositional implication: after all, they both
+are just particular cases of functional abstraction, in sorts
+\texttt{Set} or \texttt{Prop}, correspondingly.} For instance, we can
+prove now that \coqdocinductive{False} implies the equality 1 = 2.\footnote{We
+postpone the definition of the equality till the next chapter, and for
+now let us consider it to be just an arbitrary proposition.}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Theorem} \coqdocvar{one\_eq\_two}: \coqdocvar{False} \ensuremath{\rightarrow} 1 = 2.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+One way to prove this statement is to use the \coqdocinductive{False} induction
+principle, i.e., the theorem \coqdocdefinition{False\_ind}, directly by instantiating it
+with the right predicate \coqdocaxiom{P}:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{exact}: (\coqdocvar{False\_ind} (1 = 2)).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+This indeed proves the theorem, but for now, let us explore a couple
+of other ways to prove the same statement. For this we first
+\ccom{Undo} \coqdockw{Undo} the last command of the already succeeded but not
+yet completed proof.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Undo}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Instead of supplying the argument (1 = 2) to \coqdocdefinition{False\_ind} manually,
+we can leave it to Coq to figure out, what it should be, by using the
+Ssreflect \coqdoctac{apply}: tactic.\ssrt{apply:}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{apply}: \coqdocvar{False\_ind}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The following thing just happened: the tactic \coqdoctac{apply}: supplied with
+an argument \coqdocdefinition{False\_ind}, tried to figure out whether our goal \coqdocinductive{False}
+\ensuremath{\rightarrow} (1 = 2) matches any \textit{head} type of the theorem \coqdocdefinition{False\_ind}.
+\index{head type} By \textit{head type} we mean a component of type (in
+this case, \coqdockw{\ensuremath{\forall}} \coqdocaxiom{P} : \coqdockw{Prop}, \coqdocinductive{False} \ensuremath{\rightarrow} \coqdocaxiom{P}), which is a type by itself
+and possibly contains free variables. For instance, recalling that
+\ensuremath{\rightarrow} is right-associative, head-types of \coqdocdefinition{False\_ind} would be \coqdocaxiom{P},
+\coqdocinductive{False} \ensuremath{\rightarrow} \coqdocaxiom{P} and \coqdockw{\ensuremath{\forall}} \coqdocaxiom{P} : \coqdockw{Prop}, \coqdocinductive{False} \ensuremath{\rightarrow} \coqdocaxiom{P} itself.
+
+
+So, in our example, the call to the tactics \coqdoctac{apply}: \coqdocdefinition{False\_ind} makes
+Coq realize that the goal we are trying to prove matches the type
+\coqdocinductive{False} \ensuremath{\rightarrow} \coqdocaxiom{P}, where \coqdocaxiom{P} is taken to be (1 = 2). Since in this case
+there is no restrictions on what \coqdocaxiom{P} can be (as it is
+universally-quantified in the type of \coqdocdefinition{False\_ind}), Coq assigns \coqdocaxiom{P} to
+be (1 = 2), which, after such specialization, turns the type of
+\coqdocdefinition{False\_ind} to be exactly the goal we're after, and the proof is done.
+
+
+There are many more ways to prove this rather trivial statement, but
+at this moment we will demonstrate just yet another one, which does
+not appeal to the \coqdocdefinition{False\_ind} induction principle, but instead
+proceeds by \textit{case analysis}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Undo}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{case}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The tactic \coqdoctac{case}\ssrt{case} makes Coq to perform the case
+analysis. In particular, it \textit{deconstructs} the \textit{top assumption} of the
+goal. The top assumption in the goal is such that it comes first
+before any arrows, and in this case it is a value of type
+\coqdocinductive{False}. Then, for all constructors of the type, whose value is being
+case-analysed, the tactic \coqdoctac{case} constructs \textit{subgoals} to be
+proved. Informally, in mathematical reasoning, the invocation of the
+\coqdoctac{case} tactic would correspond to the statement ``let us consider all
+possible cases, which amount to the construction of the top
+assumption''. Naturally, since \coqdocinductive{False} has \textit{no} constructors (as it
+corresponds to the \coqdocvar{empty} type), the case analysis on it produces
+\textit{zero} subgoals, which completes the proof immediately. Since the
+result of the proof is just some program, again, we can demonstrate
+the effect of \coqdoctac{case} tactic by proving the same theorem with an exact
+proof term:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Undo}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{exact}: (\coqdockw{fun} (\coqdocvar{f}: \coqdocvar{False}) \ensuremath{\Rightarrow} \coqdockw{match} \coqdocvar{f} \coqdockw{with} \coqdockw{end}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+As we can see, one valid proof term of \coqdoclemma{one\_eq\_two} is just a
+function, which case-analyses on the value of type \coqdocinductive{False}, and such
+case-analysis has no branches.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\section{Implication and universal quantification}
+
+
+
+
+By this moment we have already seen how implication is represented in
+Coq: it is just a functional type, represented by the ``arrow'' notation
+\ensuremath{\rightarrow} and familiar to all functional programmers. Indeed, if a function
+of type \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvar{B} is a program that takes an argument value of type \coqdocvariable{A}
+and returns a result value of type \coqdocvar{B}, then the propositional
+implication \coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocaxiom{Q} is, ... a program that takes an argument proof
+term of type \coqdocaxiom{P} and returns a proof of the proposition \coqdocaxiom{Q}.
+
+
+Unlike most of the value-level functions we have seen so far,
+propositions are usually parametrized by other propositions, which
+makes them instances of \textit{polymorphic} types, as they appear in
+\index{System $F$}
+System~$F$ and System $F_{\omega}$. Similarly to these systems, in
+Coq the universal quantifier \coqdockw{\ensuremath{\forall}} (spelled \texttt{forall}) binds a
+variable immediately following it in the scope of the subsequent
+type.\footnote{As it has been noticed in Chapter~\ref{ch:funprog} the
+$\forall$-quantifier is Coq's syntactic notation for dependent
+function types, sometimes also referred to a \emph{$\Pi$-types} or
+\emph{dependent product types}.}\index{dependent function type} For
+instance, the transitivity of implication in Coq can be expressed via
+the following proposition:
+
+
+\begin{center}
+\coqdockw{\ensuremath{\forall}} \coqdocaxiom{P} \coqdocaxiom{Q} \coqdocdefinition{$R$}: \coqdockw{Prop}, (\coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocaxiom{Q}) \ensuremath{\rightarrow} (\coqdocaxiom{Q} \ensuremath{\rightarrow} \coqdocdefinition{$R$}) \ensuremath{\rightarrow} \coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocdefinition{$R$}
+\end{center}
+
+
+The proposition is therefore \textit{parametrized} over three propositional
+variables, \coqdocaxiom{P}, \coqdocaxiom{Q} and \coqdocdefinition{$R$}, and states that from a proof term of
+type \coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocaxiom{Q} and a proof term of type \coqdocaxiom{Q} \ensuremath{\rightarrow} \coqdocdefinition{$R$} one can build a
+proof term of type \coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocdefinition{$R$}.\footnote{Recall that the arrows have
+right associativity, just like function types in Haskell and OCaml,
+which allows one to apply functions partially, specifying their
+arguments one by one} Let us now prove this statement in the form of
+a theorem.  \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Theorem} \coqdocvar{imp\_trans}: \coqdockw{\ensuremath{\forall}} \coqdocvar{P} \coqdocvar{Q} \coqdocvar{$R$}: \coqdockw{Prop}, (\coqdocvar{P} \ensuremath{\rightarrow} \coqdocvar{Q}) \ensuremath{\rightarrow} (\coqdocvar{Q} \ensuremath{\rightarrow} \coqdocvar{$R$}) \ensuremath{\rightarrow} \coqdocvar{P} \ensuremath{\rightarrow} \coqdocvar{$R$}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Our goal is the statement of the theorem, its type. The first thing we
+are going to do is to ``peel off'' some of the goal assumptions---the
+\coqdockw{\ensuremath{\forall}}-bound variables---and move them from the goal to the
+assumption context (i.e., from below to above the double line). This
+step in the proof script is usually referred to as \textit{bookkeeping},
+since it does not directly contribute to reducing the goal, but
+instead moves some of the values from the goal to assumption, as a
+preparatory step for the future reasoning.
+
+
+\index{tacticals}
+\index{bookkeeping}
+\index{tacticals|seealso {Coq/Ssreflect tacticals}}
+Ssreflect offers a tactic and a small but powerful toolkit of
+\textit{tacticals} (i.e., higher-order tactics) for bookkeeping. In
+particular, for moving the bound variables from ``bottom to the top'',
+one should use a combination of the ``no-op'' tactic \coqdoctac{move}\ssrt{move}
+and the tactical \ensuremath{\Rightarrow} \ssrtl{=>}(spelled \texttt{=}>). The following
+command moves the next three assumptions from the goal, \coqdocaxiom{P}, \coqdocaxiom{Q} and
+\coqdocdefinition{$R$} to the assumption context, simultaneously renaming them to \coqdocvariable{A},
+\coqdocvar{B} and \coqdocvar{C}. The renaming is optional, so we just show it here to
+demonstrate the possibility to give arbitrary (and, preferably, more
+meaningful) names to the assumption variables ``on the fly'' while
+constructing the proof via a script.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow} \coqdocvar{A} \coqdocvar{B} \coqdocvar{C}.\coqdoceol
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{A} : \coqdockw{Prop}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{B} : \coqdockw{Prop}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{C} : \coqdockw{Prop}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+(\coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvar{B}) \ensuremath{\rightarrow} (\coqdocvar{B} \ensuremath{\rightarrow} \coqdocvar{C}) \ensuremath{\rightarrow} \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvar{C}
+
+\coqdocemptyline
+
+
+We can now move the three other arguments to the top using the same
+command: the \coqdoctac{move}\ensuremath{\Rightarrow} combination works uniformly for \coqdockw{\ensuremath{\forall}}-bound
+variables as well as for the propositions on the left of the arrow.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow} \coqdocvar{H1} \coqdocvar{H2} \coqdocvar{a}.\coqdoceol
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvar{H1} : \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvar{B}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H2} : \coqdocvar{B} \ensuremath{\rightarrow} \coqdocvar{C}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{a} : \coqdocvariable{A}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocvar{C}
+
+\coqdocemptyline
+
+
+Again, there are multiple ways to proceed now. For example, we can
+recall the functional programming and get the result of type \coqdocvar{C} just
+by two subsequent applications of \coqdocvar{H1} and \coqdocvar{H2} to the value \coqdocvariable{a} of type \coqdocvariable{A}:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{exact}: (\coqdocvar{H2} (\coqdocvar{H1} \coqdocvar{a})).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Alternatively, we can replace the direct application of the hypotheses
+\coqdocvar{H1} and \coqdocvar{H2} by the reversed sequence of calls to the \coqdoctac{apply}:
+tactics.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Undo}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\noindent
+The first use of \coqdoctac{apply}: will replace the goal \coqdocvar{C} by the goal \coqdocvar{B},
+since this is what it takes to get \coqdocvar{C} by using \coqdocvar{H2}:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{apply}: \coqdocvar{H2}.\coqdoceol
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvar{H1} : \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvar{B}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{a} : \coqdocvariable{A}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocvar{B}
+
+\coqdocemptyline
+\noindent
+The second use of \coqdoctac{apply}: reduces the proof of \coqdocvar{B} to the proof of
+\coqdocvariable{A}, demanding an appropriate argument for \coqdocvar{H1}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{apply}: \coqdocvar{H1}.\coqdoceol
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{a} : \coqdocvariable{A}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocvariable{A}
+
+\coqdocemptyline
+
+
+Notice that both calls to \coqdoctac{apply}: removed the appropriate hypotheses,
+\coqdocvar{H1} and \coqdocvar{H2} from the assumption context. If one needs a hypothesis
+to stay in the context (to use it twice, for example), then the
+occurrence of the tactic argument hypothesis should be parenthesised:
+\coqdoctac{apply}: (\coqdocvar{H1}).
+
+
+Finally, we can see that the only goal left to prove is to provide a
+proof term of type \coqdocvariable{A}. Luckily, this is exactly what we have in the
+assumption by the name \coqdocvariable{a}, so the following demonstration of the
+exact \coqdocvariable{a} finishes the proof:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{exact}: \coqdocvar{a}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+In the future, we will replace the use of trivial tactics, such as
+\coqdoctac{exact}: by Ssreflect's much more powerful tactics \coqdocvar{\texttt{\emph{done}}},\ssrt{done} which
+combines a number of standard Coq's tactics in an attempt to finish
+the proof of the current goal and reports an error if it fails to do
+so. 
+
+
+
+\begin{exercise}[$\forall$-distributivity]
+\label{ex:forall-dist}
+
+Formulate and prove the following theorem in Coq, which states the
+distributivity of universal quantification with respect to implication:
+\[
+\forall P~Q, [(\forall x, P(x) \implies Q(x)) \implies ((\forall y, P(y)) \implies \forall z, Q(z))]
+\]
+
+\hint Be careful with the scoping of universally-quantified variables
+and use parentheses to resolve ambiguities!
+
+\end{exercise}
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\subsection{On forward and backward reasoning}
+
+
+
+
+Let us check now the actual value of the proof term of theorem
+\coqdoclemma{imp\_trans}. 
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{imp\_trans}.\coqdoceol
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdoclemma{imp\_trans} = \coqdoceol
+\coqdocindent{1.00em}
+\coqdockw{fun} (\coqdocvariable{A} \coqdocvar{B} \coqdocvar{C} : \coqdockw{Prop}) (\coqdocvar{H1} : \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvar{B}) (\coqdocvar{H2} : \coqdocvar{B} \ensuremath{\rightarrow} \coqdocvar{C}) (\coqdocvariable{a} : \coqdocvariable{A}) \ensuremath{\Rightarrow}\coqdoceol
+\coqdocindent{1.00em}
+(\coqdockw{fun} \coqdocvar{\_evar\_0\_} : \coqdocvar{B} \ensuremath{\Rightarrow} \coqdocvar{H2} \coqdocvar{\_evar\_0\_}) ((\coqdockw{fun} \coqdocvar{\_evar\_0\_} : \coqdocvariable{A} \ensuremath{\Rightarrow} \coqdocvar{H1} \coqdocvar{\_evar\_0\_}) \coqdocvariable{a})\coqdoceol
+\coqdocindent{3.50em}
+: \coqdockw{\ensuremath{\forall}} \coqdocaxiom{P} \coqdocaxiom{Q} \coqdocdefinition{$R$} : \coqdockw{Prop}, (\coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocaxiom{Q}) \ensuremath{\rightarrow} (\coqdocaxiom{Q} \ensuremath{\rightarrow} \coqdocdefinition{$R$}) \ensuremath{\rightarrow} \coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocdefinition{$R$}\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdocvar{Argument} \coqdocvar{scopes} \coqdocvar{are} [\coqdocvar{type\_scope} \coqdocvar{type\_scope} \coqdocvar{type\_scope} \coqdocvar{\_} \coqdocvar{\_} \coqdocvar{\_}]
+
+\coqdocemptyline
+
+
+Even though the proof term looks somewhat hairy, this is almost
+exactly our initial proof term from the first proof attempt: \coqdocvar{H2} (\coqdocvar{H1}
+\coqdocvariable{a}). The only difference is that the hypotheses \coqdocvar{H1} and \coqdocvar{H2} are
+\textit{eta-expanded},\index{eta-expansion} that is instead of simply \coqdocvar{H1}
+the proof terms features its operational equivalent \coqdockw{fun} \coqdocvariable{b}: \coqdocvar{B} \ensuremath{\Rightarrow} \coqdocvar{H2}
+\coqdocvariable{b}. Otherwise, the printed program term indicates that the proof
+obtained by means of direct application of \coqdocvar{H1} and \coqdocvar{H2} is the same
+(modulo eta-expansion) as the proof obtained by means of using the
+\coqdoctac{apply}: tactic.
+
+
+These two styles of proving: by providing a direct proof to the goal
+or some part of it, and by first reducing the goal via tactics, are
+usually referred in the mechanized proof community as \textit{forward} and
+\textit{backward} proof styles\index{forward proof style}\index{backward
+proof style}.
+
+
+
+\begin{itemize}
+\item  The \textit{backward} proof style assumes that the goal is being gradually
+  transformed by means of applying some tactics, until its proof
+  becomes trivial and can be completed by means of basic tactics,
+  like \coqdoctac{exact}: or \coqdocvar{\texttt{\emph{done}}}.
+
+
+
+\item  The \textit{forward} proof style assumes that the human prover has some
+  ``foresight'' with respect to the goal she is going to prove, so she
+  can define some ``helper'' entities as well as to adapt the available
+  assumptions, which will then be used to solve the goal. Typical
+  example of the forward proofs are the proofs from the classical
+  mathematic textbooks: first a number of ``supporting'' lemmas is
+  formulated, proving some partial results, and finally all these
+  lemmas are applied in concert in order to prove an important
+  theorem.
+
+\end{itemize}
+
+
+While the standard Coq is very well supplied with a large number of
+tactics that support reasoning in the backward style, it is less
+convenient for the forward-style reasoning. This aspect of the tool is
+significantly enhanced by Ssreflect, which introduces a small number
+of helping tactics, drastically simplifying the forward proofs, as we
+will see in the subsequent chapters.
+
+
+\subsection{Refining and bookkeeping assumptions}
+
+
+
+
+Suppose, we have the following theorem to prove, which is just a
+simple reformulation of the previously proved \coqdoclemma{imp\_trans}:
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Theorem} \coqdocvar{imp\_trans'} (\coqdocvar{P} \coqdocvar{Q} \coqdocvar{$R$}: \coqdockw{Prop}) : (\coqdocvar{Q} \ensuremath{\rightarrow} \coqdocvar{$R$}) \ensuremath{\rightarrow} (\coqdocvar{P} \ensuremath{\rightarrow} \coqdocvar{Q}) \ensuremath{\rightarrow} \coqdocvar{P} \ensuremath{\rightarrow} \coqdocvar{$R$}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow} \coqdocvar{H1} \coqdocvar{H2}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Notice that we made the propositional variables \coqdocaxiom{P}, \coqdocaxiom{Q} and \coqdocdefinition{$R$} to be
+parameters of the theorem, rather than \coqdockw{\ensuremath{\forall}}-quantified
+values. This relieved us from the necessity to lift them using
+\coqdoctac{move}\ensuremath{\Rightarrow} in the beginning of the proof.
+
+
+In is natural to expect that the original \coqdoclemma{imp\_trans} will be of some
+use. We are now in the position to apply it directly, as the current
+goal matches its conclusion. However, let us do something slightly
+different: \textit{move} the statement of \coqdoclemma{imp\_trans} into the goal,
+simultaneously with specifying it (or, equivalently, partially
+applying) to the assumptions \coqdocvar{H1} and \coqdocvar{H2}. Such move ``to the bottom
+part'' in Ssreflect is implemented by means of the \ssrtl{:} :
+tactical, following the \coqdoctac{move} command:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{move}: (\coqdocvar{imp\_trans} \coqdocvar{P} \coqdocvar{Q} \coqdocvar{$R$})=> \coqdocvar{H}.\coqdoceol
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvar{H1} : \coqdocaxiom{Q} \ensuremath{\rightarrow} \coqdocdefinition{$R$}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H2} : \coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocaxiom{Q}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H} : (\coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocaxiom{Q}) \ensuremath{\rightarrow} (\coqdocaxiom{Q} \ensuremath{\rightarrow} \coqdocdefinition{$R$}) \ensuremath{\rightarrow} \coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocdefinition{$R$}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocdefinition{$R$}
+
+\coqdocemptyline
+
+
+What has happened now is a good example of the forward reasoning: the
+specialized version of (\coqdoclemma{imp\_trans} \coqdocaxiom{P} \coqdocaxiom{Q} \coqdocdefinition{$R$}), namely, (\coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocaxiom{Q}) \ensuremath{\rightarrow} (\coqdocaxiom{Q} \ensuremath{\rightarrow}
+\coqdocdefinition{$R$}) \ensuremath{\rightarrow} \coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocdefinition{$R$}, has been moved to the goal, so it became ((\coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocaxiom{Q}) \ensuremath{\rightarrow}
+(\coqdocaxiom{Q} \ensuremath{\rightarrow} \coqdocdefinition{$R$}) \ensuremath{\rightarrow} \coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocdefinition{$R$}) \ensuremath{\rightarrow} \coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocdefinition{$R$}. Immediately after that, the top
+assumption (that is, what has been just ``pushed'' to the goal stack)
+was moved to the top and given the name \coqdocvar{H}. Now we have the
+assumption \coqdocvar{H} that can be applied in order to reduce the goal.  
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{apply}: \coqdocvar{H}.\coqdoceol
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvar{H1} : \coqdocaxiom{Q} \ensuremath{\rightarrow} \coqdocdefinition{$R$}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{H2} : \coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocaxiom{Q}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocaxiom{Q}\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdockw{subgoal} 2 (\coqdocvar{ID} 142) \coqdockw{is}:\coqdoceol
+\coqdocindent{0.50em}
+\coqdocaxiom{Q} \ensuremath{\rightarrow} \coqdocdefinition{$R$}
+
+\coqdocemptyline
+
+
+The proof forked into two goals, since \coqdocvar{H} had two arguments, which we
+can now fulfill separately, as they trivially are our assumptions.  
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdocvar{\texttt{\emph{done}}}.\coqdoceol
+\coqdocnoindent
+\coqdocvar{\texttt{\emph{done}}}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The proof is complete, although the last step is somewhat repetitive,
+since we know that for two generated sub-goals the proofs are the
+same. In fact, applications of tactics can be \textit{chained} using the ;
+\ssrtl{;}connective, so the following complete proof of \coqdoclemma{imp\_trans'}
+runs \coqdocvar{\texttt{\emph{done}}} for \textit{all} subgoals generated by \coqdoctac{apply}:
+\coqdocvar{H}\ccom{Restart}:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Restart}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{move}: (\coqdocvar{imp\_trans} \coqdocvar{P} \coqdocvar{Q} \coqdocvar{$R$})=> \coqdocvar{H} \coqdocvar{H1} \coqdocvar{H2}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{apply}: \coqdocvar{H}; \coqdocvar{\texttt{\emph{done}}}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Also, notice that the sequence in which the hypotheses were moved to
+the top has changed: in order to make the proof more concise, we first
+created the ``massaged'' version of \coqdoclemma{imp\_trans}, and then moved it as
+\coqdocvar{H} to the top, following by \coqdocvar{H1} and \coqdocvar{H2}, which were in the goal
+from the very beginning.
+
+
+To conclude this section, let us demonstrate even shorter way to prove
+this theorem once again.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Restart}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow}\coqdocvar{H1} \coqdocvar{H2}; \coqdoctac{apply}: (\coqdocvar{imp\_trans} \coqdocvar{P} \coqdocvar{Q} \coqdocvar{$R$})=>//.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+After traditional move of the two hypotheses to the top, we applied
+the specialised version of \coqdoclemma{imp\_trans}, where its three first
+arguments were explicitly instantiated with the local \coqdocaxiom{P}, \coqdocaxiom{Q} and
+\coqdocdefinition{$R$}. This application generated two subgoals, each of which has been
+then automatically solved by the trailing tactical \ssrtl{//}\ensuremath{\Rightarrow}
+//, which is equivalent to ;\coqdoctac{try} \coqdocvar{\texttt{\emph{done}}} and, informally speaking,
+``tries to kill all the newly created goals''.\footnote{The Coq's
+\texttt{try}\ssrtl{try} tactical tries to execute its tactic argument in a "soft
+way", that is, not reporting an error if the argument fails.}
+
+
+
+
+\section{Conjunction and disjunction}
+
+
+\label{sec:conjdisj}
+
+
+Two main logical connectives, conjunction and disjunction, are
+implemented in Coq as simple inductive predicates in the sort
+\coqdockw{Prop}. In order to avoid some clutter, from this moment and till the
+end of the chapter let us start a new module \coqdocvar{Connectives} and assume
+a number of propositional variables in it (as we remember, those will
+be abstracted over outside of the module in the statements
+they\ccom{Variables} happen to occur).
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Module} \coqdocvar{Connectives}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Variables} \coqdocvar{P} \coqdocvar{Q} \coqdocvar{$R$}: \coqdockw{Prop}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The propositional conjunction of \coqdocaxiom{P} and \coqdocaxiom{Q}, denoted by \coqdocaxiom{P} \ensuremath{\land} \coqdocaxiom{Q}, is
+a straightforward Curry-Howard counterpart of the \coqdocvar{pair} datatype that
+we have already seen in Chapter~\ref{ch:funprog}, and is defined by
+means of the predicate \coqdocinductive{and}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Locate} "\_ /\symbol{92} \_".\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+"\coqdocvariable{A} \ensuremath{\land} \coqdocvar{B}" := \coqdocinductive{and} \coqdocvariable{A} \coqdocvar{B}  : \coqdocvar{type\_scope} \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{and}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\ssrd{and}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocinductive{and} (\coqdocvariable{A} \coqdocvar{B} : \coqdockw{Prop}) : \coqdockw{Prop} :=  \coqdocconstructor{conj} : \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvar{B} \ensuremath{\rightarrow} \coqdocvariable{A} \ensuremath{\land} \coqdocvar{B}\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdocvar{For} \coqdocconstructor{conj}: \coqdocvar{Arguments} \coqdocvariable{A}, \coqdocvar{B} \coqdocvar{are} \coqdocvar{implicit}\coqdoceol
+\coqdocnoindent
+\coqdocvar{For} \coqdocinductive{and}: \coqdocvar{Argument} \coqdocvar{scopes} \coqdocvar{are} [\coqdocvar{type\_scope} \coqdocvar{type\_scope}]\coqdoceol
+\coqdocnoindent
+\coqdocvar{For} \coqdocconstructor{conj}: \coqdocvar{Argument} \coqdocvar{scopes} \coqdocvar{are} [\coqdocvar{type\_scope} \coqdocvar{type\_scope} \coqdocvar{\_} \coqdocvar{\_}]
+
+\coqdocemptyline
+
+
+Proving a conjunction of \coqdocaxiom{P} and \coqdocaxiom{Q} therefore amounts to constructing
+a pair by invoking the constructor \coqdocconstructor{conj} and providing values of \coqdocaxiom{P}
+and \coqdocaxiom{Q} as its arguments:\footnote{The command
+\texttt{Goal}\ccom{Goal} creates an anonymous theorem and initiates
+the interactive proof mode.}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Goal} \coqdocvar{P} \ensuremath{\rightarrow} \coqdocvar{$R$} \ensuremath{\rightarrow} \coqdocvar{P} \ensuremath{\land} \coqdocvar{$R$}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow} \coqdocvar{p} \coqdocvar{r}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The proof can be completed in several ways. The most familiar one is
+to apply the constructor \coqdocconstructor{conj} directly. It will create two subgoals,
+\coqdocaxiom{P} and \coqdocaxiom{Q} (which are the constructor arguments), that can be
+immediately discharged.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{apply}: \coqdocvar{conj}=>//.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Alternatively, since we now know that \coqdocinductive{and} has just one constructor,
+we can use the generic Coq's \coqdoctac{constructor} \coqdocvar{n}\ttac{constructor}
+tactic, where \coqdocvar{n} is an (optional) number of a constructor to be
+applied (and in this case it's 1)
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Undo}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{constructor} 1=>//.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Finally, for propositions that have exactly one constructor, Coq
+provides a specialized tactic \coqdoctac{split}\ttac{split}, which is a synonym for
+\coqdoctac{constructor} 1:
+ \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Undo}. \coqdoctac{split}=>//.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+In order to prove something out of a conjunction, one needs to
+\textit{destruct} it to get its constructor's arguments, and the simplest way
+to do so is by the \coqdoctac{case}-analysis on a single constructor.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Goal} \coqdocvar{P} \ensuremath{\land} \coqdocvar{Q} \ensuremath{\rightarrow} \coqdocvar{Q}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{case}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Again, the tactic \coqdoctac{case} replaced the top assumption \coqdocaxiom{P} \ensuremath{\land} \coqdocaxiom{Q} of the
+goal with the arguments of its only constructor, \coqdocaxiom{P} and \coqdocaxiom{Q} making
+the rest of the proof trivial.
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdocvar{\texttt{\emph{done}}}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+The datatype of disjunction of \coqdocaxiom{P} and \coqdocaxiom{Q}, denoted by \coqdocaxiom{P} \ensuremath{\lor} \coqdocaxiom{Q}, is
+isomorphic to the \coqdocvar{sum} datatype from Chapter~\ref{ch:funprog} and
+can be constructed by using one of its two constructors: \coqdocvar{or\_introl}
+or \coqdocvar{or\_intror}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Locate} "\_ \symbol{92}/ \_".\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+"\coqdocvariable{A} \ensuremath{\lor} \coqdocvar{B}" := \coqdocinductive{or} \coqdocvariable{A} \coqdocvar{B}   : \coqdocvar{type\_scope} \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{or}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocinductive{or} (\coqdocvariable{A} \coqdocvar{B} : \coqdockw{Prop}) : \coqdockw{Prop} :=\coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{or\_introl} : \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvariable{A} \ensuremath{\lor} \coqdocvar{B} \ensuremath{|} \coqdocvar{or\_intror} : \coqdocvar{B} \ensuremath{\rightarrow} \coqdocvariable{A} \ensuremath{\lor} \coqdocvar{B}\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdocvar{For} \coqdocvar{or\_introl}, \coqdocvar{when} \coqdocvar{applied} \coqdocvar{to} \coqdocvar{less} \coqdocvar{than} 1 \coqdocvar{argument}:\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{Arguments} \coqdocvariable{A}, \coqdocvar{B} \coqdocvar{are} \coqdocvar{implicit}\coqdoceol
+\coqdocnoindent
+...
+
+\coqdocemptyline
+
+
+\ssrd{or}
+
+
+In order to prove disjunction of \coqdocaxiom{P} and \coqdocaxiom{Q}, it is sufficient to
+provide a proof of just \coqdocaxiom{P} or \coqdocaxiom{Q}, therefore appealing to the
+appropriate constructor.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Goal} \coqdocvar{Q} \ensuremath{\rightarrow} \coqdocvar{P} \ensuremath{\lor} \coqdocvar{Q} \ensuremath{\lor} \coqdocvar{$R$}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow} \coqdocvar{q}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Similarly to the case of conjunction, this proof can be completed
+either by applying a constructor directly, by using \coqdoctac{constructor} 2
+tactic or by a specialised Coq's tactic for disjunction:
+\coqdoctac{left}\ttac{left}\ttac{right} or \coqdoctac{right}. The notation "\coqdocvar{\_} \ensuremath{\lor} \coqdocvar{\_}" is
+right-associative, hence the following proof script, which first
+reduces the goal to the proof of \coqdocaxiom{Q} \ensuremath{\lor} \coqdocdefinition{$R$}, and then to the proof of
+\coqdocaxiom{Q}, which is trivial by assumption.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{right}; \coqdoctac{left}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The use of Ssreflect's tactical \coqdoctac{by}\ssrtl{by} makes sure that its
+argument tactic (\coqdoctac{right}; \coqdoctac{left} in this case) succeeds and the proof of
+the goal completes, similarly to the trailing \coqdocvar{\texttt{\emph{done}}}. If the sequence
+of tactics \coqdoctac{left}; \coqdoctac{right} wouldn't prove the goal, a proof script error
+would be reported.
+
+
+The statements that have a disjunction as their assumption are usually
+proved by case analysis on the two possible disjunction's
+constructors:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Goal} \coqdocvar{P} \ensuremath{\lor} \coqdocvar{Q} \ensuremath{\rightarrow} \coqdocvar{Q} \ensuremath{\lor} \coqdocvar{P}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{case}\ensuremath{\Rightarrow}\coqdocvar{x}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Notice how the case analysis via the Ssreflect's \coqdoctac{case} tactic was
+combined here with the trailing \ensuremath{\Rightarrow}. It resulted in moving the
+constructor parameter in \textit{each} of the subgoals from the goal
+assumptions to the assumption context. The types of \coqdocvariable{x} are different
+in the two branches of the proof, though. In the first branch, \coqdocvariable{x} has
+type \coqdocaxiom{P}, as it names the argument of the \coqdocvar{or\_introl} constructor.
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocaxiom{P} : \coqdockw{Prop}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocaxiom{Q} : \coqdockw{Prop}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocdefinition{$R$} : \coqdockw{Prop}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{x} : \coqdocaxiom{P}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocaxiom{Q} \ensuremath{\lor} \coqdocaxiom{P}\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdockw{subgoal} 2 (\coqdocvar{ID} 248) \coqdockw{is}:\coqdoceol
+\coqdocindent{0.50em}
+\coqdocaxiom{Q} \ensuremath{\lor} \coqdocaxiom{P}
+
+\coqdocemptyline
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{right}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocaxiom{P} : \coqdockw{Prop}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocaxiom{Q} : \coqdockw{Prop}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocdefinition{$R$} : \coqdockw{Prop}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{x} : \coqdocaxiom{Q}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocaxiom{Q} \ensuremath{\lor} \coqdocaxiom{P}
+
+\coqdocemptyline
+
+
+In the second branch the type of \coqdocvariable{x} is \coqdocaxiom{Q}, as it accounts for the
+case of the \coqdocvar{or\_intror} constructor.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{left}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+It is worth noticing that the definition of disjunction in Coq is
+\textit{constructive}, whereas the disjunction in classical propositional
+logic is not. More precisely, in classical logic the proof of the
+proposition \coqdocaxiom{P} \ensuremath{\lor} \textasciitilde \coqdocaxiom{P} is true by the axiom of excluded middle
+(see Section~\ref{sec:axioms} for a more detailed discussion),
+whereas in Coq, proving \coqdocaxiom{P} \ensuremath{\lor} \textasciitilde \coqdocaxiom{P} would amount to \textit{constructing} the
+proof of either \coqdocaxiom{P} or \textasciitilde \coqdocaxiom{P}. Let us illustrate it with a specific
+example. If \coqdocaxiom{P} is a proposition stating that \coqdocaxiom{P} = \coqdocvar{NP}, then in
+classical logic tautology \coqdocaxiom{P} \ensuremath{\lor} \textasciitilde \coqdocaxiom{P} holds, although it does not
+contribute to the proof of either of the disjuncts. In constructive
+logic, which Coq is an implementation of, in the trivial assumptions
+given the proof of \coqdocaxiom{P} \ensuremath{\lor} \textasciitilde \coqdocaxiom{P}, we would be able to extract the proof
+of either \coqdocaxiom{P} or \textasciitilde\coqdocaxiom{P}.\footnote{Therefore, winning us the Clay
+Institute's award.}
+
+
+
+
+\section{Proofs with negation}
+
+
+
+
+In Coq's constructive approach proving the negation of \textasciitilde\coqdocaxiom{P} of a
+proposition \coqdocaxiom{P} literally means that one can derive
+the falsehood from \coqdocaxiom{P}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Locate} "\~{} \_".\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+"\~{} \coqdocvariable{x}" := \coqdocdefinition{not} \coqdocvariable{x}       : \coqdocvar{type\_scope}
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{not}.\coqdoceol
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocdefinition{not} = \coqdockw{fun} \coqdocvariable{A} : \coqdockw{Prop} \ensuremath{\Rightarrow} \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocinductive{False}\coqdoceol
+\coqdocindent{3.50em}
+: \coqdockw{Prop} \ensuremath{\rightarrow} \coqdockw{Prop}
+
+\coqdocemptyline
+
+
+Therefore, the negation \coqdocdefinition{not} on propositions from \coqdockw{Prop} is just a
+function, which maps a proposition \coqdocvariable{A} to the implication \coqdocvariable{A} \ensuremath{\rightarrow}
+\coqdocinductive{False}. With this respect the intuition of negation from classical
+logic might be misleading: as it will be discussed in
+Section~\ref{sec:axioms}, the Calculus of Constructions lacks the
+double negation elimination axiom, which means that the proof of \textasciitilde \textasciitilde\coqdocvariable{A} will not
+deliver the proof of \coqdocvariable{A}, as such derivation would be non-constructive,
+as one cannot get a value of type \coqdocvariable{A} out of a function
+of type (\coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvar{B}) \ensuremath{\rightarrow} \coqdocvar{B}, where \coqdocvar{B} is taken to be \coqdocinductive{False}.
+
+
+However, reasoning out of negation helps to derive the familiar proofs
+by contradiction, given that we managed to construct \coqdocaxiom{P} \textit{and} \textasciitilde\coqdocaxiom{P},
+as demonstrated by the following theorem, which states that from any
+\coqdocaxiom{Q} can be derived from \coqdocaxiom{P} and \textasciitilde\coqdocaxiom{P}. 
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Theorem} \coqdocvar{absurd}: \coqdocvar{P} \ensuremath{\rightarrow} \textasciitilde\coqdocvar{P} \ensuremath{\rightarrow} \coqdocvar{Q}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}. \coqdoctac{by} \coqdoctac{move}\ensuremath{\Rightarrow}\coqdocvar{p} \coqdocvar{H}; \coqdoctac{move} : (\coqdocvar{H} \coqdocvar{p}). \coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+One extremely useful theorem from propositional logic involving
+negation is \textit{contraposition}. It states that in an implication, the
+assumption and the goal can be flipped if inverted.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Theorem} \coqdocvar{contraP}: (\coqdocvar{P} \ensuremath{\rightarrow} \coqdocvar{Q}) \ensuremath{\rightarrow} \textasciitilde\coqdocvar{Q} \ensuremath{\rightarrow} \textasciitilde\coqdocvar{P}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+Let us see how it can be proved in Coq \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow} \coqdocvar{H} \coqdocvar{Hq}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move} /\coqdocvar{H}.\coqdoceol
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvar{H} : \coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocaxiom{Q}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{Hq} : \textasciitilde \coqdocaxiom{Q}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocaxiom{Q} \ensuremath{\rightarrow} \coqdocinductive{False}
+
+\coqdocemptyline
+
+
+The syntax \coqdoctac{move} / \coqdocvar{H} (spaces in between are optional) stands for one
+of the most powerful features of Ssreflect, called \textit{views} (see
+Section~9 of~\cite{Gontier-al:TR}), which allows one to \textit{weaken} the
+assumption in the goal part of the proof on the fly by applying a
+hypothesis \coqdocvar{H} to the top assumption in the goal. In the script above
+the first command \coqdoctac{move}\ensuremath{\Rightarrow} \coqdocvar{H} \coqdocvar{Hq} simply popped two assumptions from the
+goal to the context. What is left is \textasciitilde\coqdocaxiom{P}, or, equivalently \coqdocaxiom{P} \ensuremath{\rightarrow}
+\coqdocinductive{False}. The view mechanism then ``interpreted'' \coqdocaxiom{P} in the goal via \coqdocvar{H}
+and changing it to \coqdocaxiom{Q}, since \coqdocvar{H} was of type \coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocaxiom{Q}, which results
+in the modified goal \coqdocaxiom{Q} \ensuremath{\rightarrow} \coqdocinductive{False}.  Next, we apply the view \coqdocvar{Hq} to
+the goal, which switches \coqdocaxiom{Q} to \coqdocinductive{False}, which makes the rest of the
+proof trivial.  \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{move} /\coqdocvar{Hq}.\coqdoceol
+\coqdocnoindent
+\coqdocvar{\texttt{\emph{done}}}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+\section{Existential quantification}
+
+
+\label{sec:exists}
+
+
+Existential quantification in Coq, which is denoted by the notation
+``\coqdoctac{exists} \coqdocvariable{x}, \coqdocaxiom{P} \coqdocvariable{x}'' is just yet another inductive predicate with exactly
+one constructor:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Locate} "exists".\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+"'exists' x .. y , p" := \coqdocinductive{ex} (\coqdockw{fun} \coqdocvariable{x} \ensuremath{\Rightarrow} .. (\coqdocinductive{ex} (\coqdockw{fun} \coqdocvariable{y} \ensuremath{\Rightarrow} \coqdocvar{p})) ..)\coqdoceol
+\coqdocindent{11.00em}
+: \coqdocvar{type\_scope}
+
+\coqdocemptyline
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{ex}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocinductive{ex} (\coqdocvariable{A} : \coqdockw{Type}) (\coqdocaxiom{P} : \coqdocvariable{A} \ensuremath{\rightarrow} \coqdockw{Prop}) : \coqdockw{Prop} :=\coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{ex\_intro} : \coqdockw{\ensuremath{\forall}} \coqdocvariable{x} : \coqdocvariable{A}, \coqdocaxiom{P} \coqdocvariable{x} \ensuremath{\rightarrow} \coqdocinductive{ex} \coqdocvariable{A} \coqdocaxiom{P}
+
+\coqdocemptyline
+
+
+\ssrd{ex}
+
+
+The notation for existentially quantified predicates conveniently
+allows one to existentially quantify over several variables,
+therefore, leading to a chain of enclosed calls of the constructor
+\coqdocvar{ex\_intro}.  
+
+
+The inductive predicate \coqdocinductive{ex} is parametrized with a type \coqdocvariable{A}, over
+elements of which we quantify, and a predicate function of type \coqdocvariable{A} \ensuremath{\rightarrow}
+\coqdockw{Prop}. What is very important is that the scope of the variable \coqdocvariable{x} in
+the constructor captures \coqdocinductive{ex} \coqdocvariable{A} \coqdocaxiom{P} as well. That is, the constructor
+type could be written as \coqdockw{\ensuremath{\forall}} \coqdocvariable{x}, (\coqdocaxiom{P} \coqdocvariable{x} \ensuremath{\rightarrow} \coqdocinductive{ex} \coqdocvariable{A} \coqdocaxiom{P}) to emphasize that
+each particular instance of \coqdocinductive{ex} \coqdocvariable{A} \coqdocaxiom{P} carries is defined by a
+\textit{particular} value of \coqdocvariable{x}. The actual value of \coqdocvariable{x}, which satisfies
+the predicate \coqdocaxiom{P} is, however, not exposed to the client, providing
+the \textit{data abstraction} and information hiding, similarly to the
+traditional existential types (see Chapter~24
+of~\cite{Pierce:BOOK02}), which would serve as a good analogy.  Each
+inhabitant of the type \coqdocinductive{ex} is therefore an instance of a
+\emph{dependent pair},\footnote{In the literature, dependent pairs
+are often referred to as \emph{dependent sums} or
+$\Sigma$-types.\index{dependent sum}} whose first element is a
+\textit{witness} for the following predicate \coqdocaxiom{P}, and the second one is a
+result of application of \coqdocaxiom{P} to \coqdocvariable{x}, yielding a particular
+proposition.
+
+
+\index{Sigma-type|see {dependent sum}}
+
+
+The proofs of propositions that assume existential quantification are
+simply the proofs by case analysis: destructing the only constructor
+of \coqdocinductive{ex}, immediately provides its arguments: a witness \coqdocvariable{x} and the
+predicate \coqdocaxiom{P}, satisfied by \coqdocvariable{x}. The proofs, where the existential
+quantification is a goal, can be completed by applying the constructor
+\coqdocvar{ex\_intro} directly or by using a specialized Coq's tactic \coqdoctac{exists} \coqdocvariable{z},
+which does exactly the same, instantiating the first parameter of the
+constructor with the provided value \coqdocvariable{z}. Let us demonstrate it on a
+simple example~\cite[\S 5.2.6]{Bertot-Casteran:BOOK}, accounting for
+the weakening of the predicate, satisfying the existentially
+quantified variable.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Theorem} \coqdocvar{ex\_imp\_ex} \coqdocvar{A} (\coqdocvar{S} \coqdocvar{T}: \coqdocvar{A} \ensuremath{\rightarrow} \coqdockw{Prop}): \coqdoceol
+\coqdocindent{1.00em}
+(\coqdoctac{exists} \coqdocvar{a}: \coqdocvar{A}, \coqdocvar{S} \coqdocvar{a}) \ensuremath{\rightarrow} (\coqdockw{\ensuremath{\forall}} \coqdocvar{x}: \coqdocvar{A}, \coqdocvar{S} \coqdocvar{x} \ensuremath{\rightarrow} \coqdocvar{T} \coqdocvar{x}) \ensuremath{\rightarrow} \coqdoctac{exists} \coqdocvar{b}: \coqdocvar{A}, \coqdocvar{T} \coqdocvar{b}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The parentheses are important here, otherwise, for instance, the scope
+of the first existentially-quantified variable \coqdocvariable{a} would be the whole
+subsequent statement, not just the proposition \textit{S a}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+First, we decompose the first existential product into the witness \coqdocvariable{a}
+and the proposition \coqdocvar{Hst}, and also store the universally-quantified
+implication assumption with the name \coqdocvar{Hst}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{case}\ensuremath{\Rightarrow}\coqdocvar{a} \coqdocvar{Hs} \coqdocvar{Hst}.\coqdoceol
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{A} : \coqdockw{Type}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocdefinition{S} : \coqdocvariable{A} \ensuremath{\rightarrow} \coqdockw{Prop}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{T} : \coqdocvariable{A} \ensuremath{\rightarrow} \coqdockw{Prop}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{a} : \coqdocvariable{A}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{Hs} : \coqdocdefinition{S} \coqdocvariable{a}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{Hst} : \coqdockw{\ensuremath{\forall}} \coqdocvariable{x} : \coqdocvariable{A}, \coqdocdefinition{S} \coqdocvariable{x} \ensuremath{\rightarrow} \coqdocvariable{T} \coqdocvariable{x}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdoctac{exists} \coqdocvariable{b} : \coqdocvariable{A}, \coqdocvariable{T} \coqdocvariable{b}
+
+\coqdocemptyline
+Next, we apply the \coqdocinductive{ex}'s constructor by means of the \coqdoctac{exists}
+tactic with an explicit witness value \coqdocvariable{a}: 
+
+
+\ssrt{exists}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{exists} \coqdocvar{a}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+We finish the proof  by applying the weakening hypothesis \coqdocvar{Hst}. \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{apply}: \coqdocvar{Hst}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\begin{exercise}
+
+
+Let us define our own version \coqdocinductive{my\_ex} of the existential quantifier
+using the Ssreflect notation for constructors:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocvar{my\_ex} \coqdocvar{A} (\coqdocvar{S}: \coqdocvar{A} \ensuremath{\rightarrow} \coqdockw{Prop}) : \coqdockw{Prop} := \coqdocvar{my\_ex\_intro} \coqdocvar{x} \coqdockw{\texttt{\emph{of}}} \coqdocvar{S} \coqdocvar{x}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The reader is invited to prove the following goal, establishing the
+equivalence of the two propositions
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Goal} \coqdockw{\ensuremath{\forall}} \coqdocvar{A} (\coqdocvar{S}: \coqdocvar{A} \ensuremath{\rightarrow} \coqdockw{Prop}), \coqdocvar{my\_ex} \coqdocvar{A} \coqdocvar{S} \texttt{<->} \coqdoctac{exists} \coqdocvar{y}: \coqdocvar{A}, \coqdocvar{S} \coqdocvar{y}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\hint the propositional equivalence \texttt{<->} is just a conjunction of
+two implications, so proving it can be reduced to two separate goals
+by means of \coqdoctac{split} tactics.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\end{exercise}
+
+
+\subsection{A conjunction and disjunction analogy}
+
+
+
+
+Sometimes, the universal and the existential quantifications are
+paraphrased as ``infinitary'' conjunction and disjunction
+correspondingly. This analogy comes in handy when understanding the
+properties of both quantifications, so let us elaborate on it for a bit.
+
+
+In order to prove the conjunction \coqdocvar{P1} \ensuremath{\land} ... \ensuremath{\land} \coqdocvar{Pn}, one needs to
+establish that \textit{all} propositions \coqdocvar{P1} ... \coqdocvar{Pn} hold, which in the
+finite case can be done by proving \coqdocvar{n} goals, for each statement
+separately (and this is what the \coqdoctac{split} tactic helps to
+do). Similarly, in order to prove the propositions \coqdockw{\ensuremath{\forall}} \coqdocvariable{x}: \coqdocvariable{A}, \coqdocaxiom{P} \coqdocvariable{x},
+one needs to prove that \coqdocaxiom{P} \coqdocvariable{x} holds for \textit{any} \coqdocvariable{x} of type \coqdocvariable{A}. Since
+the type \coqdocvariable{A} itself can define an infinite set, there is no way to
+enumerate all conjuncts, however, an explicit handle \coqdocvariable{x} gives a way
+to effectively \textit{index} them, so proving \coqdocaxiom{P} \coqdocvariable{x} for an arbitrary \coqdocvariable{x} would
+establish the validity of the universal quantification itself. Another
+useful insight is that in Coq \coqdockw{\ensuremath{\forall}} \coqdocvariable{x}: \coqdocvariable{A}, \coqdocaxiom{P} \coqdocvariable{x} is a type of a
+dependent function that maps \coqdocvariable{x} of type \coqdocvariable{A} to a value of type \coqdocaxiom{P}
+\coqdocvariable{x}. The proof of the quantification would be, therefore, a function
+with a suitable ``plot''. Similarly, in the case of \coqdocvar{n}-ary conjunction,
+the function has finite domain of exactly \coqdocvar{n} points, for each of
+which an appropriate proof term should be found.
+
+
+In order to prove the \coqdocvar{n}-ary disjunction \coqdocvar{P1} \ensuremath{\lor} ... \ensuremath{\lor} \coqdocvar{Pn} in Coq, it
+is sufficient to provide a proof for just one of the disjunct \textit{as well
+as} a ``tag'' --- an indicator, which disjunct exactly is being proven
+(this is what tactics \coqdoctac{left} and \coqdoctac{right} help to achieve). In the case
+of infinitary disjunction, the existential quantification ``\coqdoctac{exists} \coqdocvariable{x},
+\coqdocaxiom{P} \coqdocvariable{x}'', the existentially quantified variable plays role of the tag
+indexing all possible propositions \coqdocaxiom{P} \coqdocvariable{x}. Therefore, in order to prove
+such a proposition, one needs first to deliver a witness \coqdocvariable{x} (usually,
+by means of calling the tactics \coqdoctac{exists}), and then prove that for
+this witness/tag the proposition \coqdocaxiom{P} \coqdocvariable{x} holds. Continuing the same
+analogy, the disjunction in the assumption of a goal usually leads to
+the proof by \coqdoctac{case} analysis assuming that one of the disjuncts holds
+at a time. Similarly, the way to destruct the existential
+quantification is by case-analysing on its constructor, which results
+in acquiring the witness (i.e., the ``tag'') and the corresponding
+``disjunct''.
+
+
+Finally, the folklore alias ``dependent product type'' for dependent
+function types (i.e., \coqdockw{\ensuremath{\forall}}-quantified types) indicates its
+relation to products, which are Curry-Howard counterparts of
+conjunctions. In the same spirit, the term ``dependent sum type'' for
+the dependent types, of which existential quantification is a
+particular case, hints to the relation to the usual sum types, and, in
+particular \coqdocvar{sum} (discussed in Chapter~\ref{ch:funprog}), which is a
+Curry-Howard dual of a disjunction.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{End} \coqdocvar{Connectives}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\section{Missing axioms from classical logic}
+
+
+\label{sec:axioms}
+
+
+In the previous sections of this chapter, we have seen how a fair
+amount of propositions from the higher-order propositional logics can
+be encoded and proved in Coq. However, some reasoning principles,
+employed in \textit{classical} propositional logic, cannot be encoded in
+Coq in a form of provable statements, and, hence, should be encoded as
+\textit{axioms}.
+
+
+\index{classical propositional logic} In this section, we provide a
+brief and by all means incomplete overview of the classical
+propositional logic axioms that are missing in Coq, but can be added
+by means of importing the appropriate libraries. Chapter~12 of the
+book~\cite{Chlipala:BOOK} contains a detailed survey of useful axioms
+that can be added into Coq development on top of CIC.
+
+
+To explore some of some of the axioms, we first import that classical
+logic module \coqdoclibrary{Classical\_Prop}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Import} \coqdocvar{Classical\_Prop}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The most often missed axiom is the axiom of \textit{excluded middle}, which
+postulates that the disjunction of \coqdocaxiom{P} and \textasciitilde\coqdocaxiom{P} is provable. Adding
+this axiom circumvents the fact that the reasoning out of the excluded
+middle principle is \textit{non-constructive}, as discussed in
+Section~\ref{sec:conjdisj}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{classic}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocaxiom{classic}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} \coqdocaxiom{P} : \coqdockw{Prop}, \coqdocaxiom{P} \ensuremath{\lor} \textasciitilde \coqdocaxiom{P}
+
+\coqdocemptyline
+
+
+Another axiom from the classical logic, which coincides with the type
+of Scheme's \coqdocvar{call}/\coqdocvar{cc}
+operator\footnote{\url{http://community.schemewiki.org/?call-with-current-continuation}}
+(pronounced as \textit{call with current continuation}) modulo Curry-Howard
+isomorphism is \textit{Peirce's law}:
+\index{Peirce's law}
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{peirce\_law} := \coqdockw{\ensuremath{\forall}} \coqdocvar{P} \coqdocvar{Q}: \coqdockw{Prop}, ((\coqdocvar{P} \ensuremath{\rightarrow} \coqdocvar{Q}) \ensuremath{\rightarrow} \coqdocvar{P}) \ensuremath{\rightarrow} \coqdocvar{P}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+In Scheme-like languages, the \coqdocvar{call}/\coqdocvar{cc} operator allows one to
+invoke the undelimited continuation, which aborts the
+computation. Similarly to the fact that \coqdocvar{call}/\coqdocvar{cc} cannot be
+implemented in terms of polymorphically-typed lambda calculus as a
+function and should be added as an external operator, the Peirce's law
+is an axiom in the constructive logic.
+
+
+The classical double negation principle is easily derivable from
+Peirce's law, and corresponds to the type of \coqdocvar{call}/\coqdocvar{cc}, which always
+invokes its continuation parameter, aborting the current computation.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{NNPP}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdoclemma{NNPP}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} \coqdocaxiom{P} : \coqdockw{Prop}, \textasciitilde \textasciitilde\coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocaxiom{P}
+
+\coqdocemptyline
+
+
+Finally, the classical formulation of the implication through the
+disjunction is again an axiom in the constructive logic, as otherwise
+from the function of type \coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocaxiom{Q} one would be able to construct the
+proof of \textasciitilde\coqdocaxiom{P} \ensuremath{\lor} \coqdocaxiom{Q}, which would make the law of excluded middle
+trivial to derive.
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{imply\_to\_or}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdoclemma{imply\_to\_or}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} \coqdocaxiom{P} \coqdocaxiom{Q} : \coqdockw{Prop}, (\coqdocaxiom{P} \ensuremath{\rightarrow} \coqdocaxiom{Q}) \ensuremath{\rightarrow} \textasciitilde\coqdocaxiom{P} \ensuremath{\lor} \coqdocaxiom{Q}
+
+\coqdocemptyline
+
+
+Curiously, none of these axioms, if added to Coq, makes its logic
+unsound: it has been rigorously proven (although, not within Coq, due
+to \Godel's incompleteness result) that all classical logic axioms
+are consistent with CIC, and, therefore, don't make it possible to
+derive the falsehood~\cite{Werner:TACS97}.
+
+
+The following exercise reconciles most of the familiar axioms of 
+classical logic.
+
+
+\begin{exercise}[Equivalence of classical logic axioms (from \S~5.2.4
+of~\cite{Bertot-Casteran:BOOK})] \label{ex:equivax} 
+
+
+Prove that the following five axioms of the classical are equivalent.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{peirce} := \coqdocvar{peirce\_law}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{double\_neg} := \coqdockw{\ensuremath{\forall}} \coqdocvar{P}: \coqdockw{Prop}, \textasciitilde \textasciitilde \coqdocvar{P} \ensuremath{\rightarrow} \coqdocvar{P}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{excluded\_middle} := \coqdockw{\ensuremath{\forall}} \coqdocvar{P}: \coqdockw{Prop}, \coqdocvar{P} \ensuremath{\lor} \textasciitilde\coqdocvar{P}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{de\_morgan\_not\_and\_not} := \coqdockw{\ensuremath{\forall}} \coqdocvar{P} \coqdocvar{Q}: \coqdockw{Prop}, \textasciitilde ( \textasciitilde\coqdocvar{P} \ensuremath{\land} \textasciitilde\coqdocvar{Q}) \ensuremath{\rightarrow} \coqdocvar{P} \ensuremath{\lor} \coqdocvar{Q}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{implies\_to\_or} := \coqdockw{\ensuremath{\forall}} \coqdocvar{P} \coqdocvar{Q}: \coqdockw{Prop}, (\coqdocvar{P} \ensuremath{\rightarrow} \coqdocvar{Q}) \ensuremath{\rightarrow} (\~{}\coqdocvar{P} \ensuremath{\lor} \coqdocvar{Q}).\coqdoceol
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\hint Use \coqdoctac{rewrite} /\coqdocvar{d} \ssrt{rewrite} tactics to unfold the
+ definition of a value \coqdocvar{d} and replace its name by its body. You can
+ chain several unfoldings by writing \coqdoctac{rewrite} /\coqdocvar{d1} /\coqdocvar{d2} ...
+ etc. \ssrt{rewrite}
+
+
+\hint To facilitate the forward reasoning by contradiction, you can
+ use the Ssreflect tactic \coqdocvar{\texttt{\emph{suff}}}: \coqdocaxiom{P}, \ssrt{suff:} where \coqdocaxiom{P} is
+ an arbitrary proposition. The system will then require you to prove
+ that \coqdocaxiom{P} implies the goal \textit{and} \coqdocaxiom{P} itself.
+
+
+\ccom{Admitted}
+
+
+\hint Stuck with a tricky proof? Use the Coq \coqdocvar{Admitted} keyword as a
+ ``stub'' for an unfinished proof of a goal, which, nevertheless will be
+ considered completed by Coq. You can always get back to an admitted
+ proof later.
+
+
+\end{exercise}
+
+
+
+
+\section{Universes and \texorpdfstring{\protect\coqdockw{Prop}}{Prop} impredicativity}
+
+
+
+
+While solving Exercise~\ref{ex:equivax} from the previous section,
+the reader could notice an interesting detail about the propositions
+in Coq and the sort \coqdockw{Prop}: the propositions that quantify over
+propositions still remain to be propositions, i.e., they still belong
+to the sort \coqdockw{Prop}. This property of propositions in Coq (and, in
+general, the ability of entities of some class to abstract over the
+entities of the same class) is called
+\textit{impredicativity}. \index{impredicativity} The opposite
+characteristic (i.e., the inability to refer to the elements of the
+same class) is called \textit{predicativity}. \index{predicativity}
+
+
+One of the main challenges when designing the Calculus of
+Constructions was to implement its logical component (i.e., the
+fragment responsible for constructing and operating with elements of
+the \coqdockw{Prop} sort), so it would subsume the existing impredicative
+propositional calculi~\cite{Coquand-Huet:ECCA85}, and, in
+\index{System $F$}
+particular, System~$F$ (which is impredicative), allowing for the
+expressive reasoning in higher-order propositional logic.
+
+
+\textit{Impredicativity} as a property of definitions allows one to define
+domains that are \textit{self-recursive}---a feature of \coqdockw{Prop} that we
+recently observed. Unfortunately, when restated in the classical set
+theory, impredicativity immediately leads to the famous paradox by Russell,
+which arises from the attempt to define the set of all sets
+that do not belong to themselves. In terms of programming,
+Russell's paradox provides a recipe to encode a fixpoint combinator in
+the calculus itself and write generally-recursive programs.
+
+
+System~$F$ is not a dependently-typed calculus and it has been
+proven to contain no paradoxes~\cite{Girard:PhD}, as it reasons only
+about \textit{types} (or, \textit{propositions}), which do not depend on
+values. However, adding dependent types to the mix (which Coq requires
+to make propositions quantify over arbitrary values, not just other
+propositions, serving as a general-purpose logic) makes the design of
+a calculus more complicated, in order to avoid paradoxes akin to the
+Russell's, which arise from mixing values and sets of values. This
+necessity to ``cut the knot'' inevitably requires to have a sort of a
+higher level, which contains all sets and propositions (i.e., the
+whole sorts \coqdockw{Set} and \coqdockw{Prop}), but does not contain itself. Let us
+call such sort \coqdockw{Type}. It turns out that the self-inclusion \coqdockw{Type} :
+\coqdockw{Type} leads to another class of paradoxes~\cite{Coquand:LICS86}, and
+in order to avoid them, the hierarchy of higher-order sorts should be
+made infinite and \textit{stratified}. \index{stratification}
+Stratification means that each sort has a level number, and is
+contained in a sort of a higher level but not in itself. The described
+approach is suggested by Martin-\loef~\cite{Martin-Loef:84} and
+adopted literally, in particular, by
+Agda~\cite{Norell:PhD}\index{Agda}. The stratified type sorts,
+following Martin-\loef's tradition, are usually referred to as
+\textit{universes}.\index{universes}
+
+
+A similar stratification is also implemented in Coq, which has its own
+universe hierarchy, although with an important twist. The two
+universes, \coqdockw{Set} and \coqdockw{Prop} cohabit at the first level of the universe
+hierarchy with \coqdockw{Prop} being impredicative. The universe containing
+both \coqdockw{Set} and \coqdockw{Prop} is called \coqdockw{Type}@\{\coqdockw{Set}+1\}, and it is \textit{predicative}, as
+well as all universes that are above it in the hierarchy. CIC
+therefore remains consistent as a calculus, only because of the fact
+that all impredicativity in it is contained at the very bottom of the
+hierarchy.
+
+
+\subsection{Exploring and debugging the universe hierarchy}
+
+
+
+
+In the light of Martin-\loef's stratification, the Coq'
+non-polymorphic types, such as \coqdocvar{nat}, \coqdocinductive{bool}, \coqdocvar{unit} or \coqdocinductive{list} \coqdocvar{nat}
+``live'' at the 0th level of universe hierarchy, namely, in the sort
+\coqdockw{Set}. The polymorphic types, quantifying over the elements of the
+\coqdockw{Set} universe are, therefore located at the higher level, which in
+Coq is denoted as \coqdockw{Type}@\{\coqdockw{Set}+1\}, but in the displays is usually presented
+simply as \coqdockw{Type}, as well as all the higher universes. We can enable
+the explicit printing of the universe levels to see how they are
+assigned:
+
+
+\ccom{Set Printing Universes}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Set Printing Universes}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{bool}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocinductive{bool}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{Set}
+
+\coqdocemptyline
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdockw{Set}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Set}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdocvar{Type@}\{\coqdockw{Set}+1\}
+
+\coqdocemptyline
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdockw{Prop}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Prop}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdocvar{Type@}\{\coqdockw{Set}+1\}
+
+\coqdocemptyline
+
+
+The following type is polymorphic over the elements of the \coqdockw{Set}
+universe, and this is why its own universe is ``bumped up'' by one, so
+it now belongs to \coqdockw{Set}+1.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{S} := \coqdockw{\ensuremath{\forall}} \coqdocvar{T}: \coqdockw{Set}, \coqdocvar{list} \coqdocvar{T}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{S}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{S}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdocvar{Type@}\{\coqdockw{Set}+1\}
+
+\coqdocemptyline
+
+
+\index{universe polymorphism} 
+
+
+Until version 8.5, Coq used to provide a very limited version of
+\textit{universe polymorphism}. To illustrate the idea, let us consider the
+next definition \coqdocdefinition{$R$}, which is polymorphic with respect to the universe
+of its parameter \coqdocvariable{A}, so its result is assumed to ``live'' in the
+universe, whose level is taken to be the level of \coqdocvariable{A}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{$R$} (\coqdocvar{A}: \coqdockw{Type}) (\coqdocvar{x}: \coqdocvar{A}): \coqdocvar{A} := \coqdocvar{x}.\coqdoceol
+\coqdocnoindent
+\coqdocvar{Arguments} \coqdocvar{$R$} [\coqdocvar{A}].\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{$R$} \coqdocvar{tt}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{$R$} \coqdocconstructor{tt}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdocvar{unit}
+
+\coqdocemptyline
+
+\texttt{\coqcomm{ |= Set <= Top.93 }}
+
+
+
+The part in comments show the inequality, generated by the Coq
+unification algorithm that had to be solved in order to determine the
+universe level of the value \coqdocdefinition{$R$} \coqdocconstructor{tt} with \coqdocvar{Top}.93 being the level,
+assigned to \coqdocdefinition{$R$} itself.
+
+
+
+
+
+
+If the argument of \coqdocdefinition{$R$} is itself a universe, it means that \coqdocvariable{A}'s
+level is higher than \coqdocvariable{x}'s level, and so is the level of \coqdocdefinition{$R$}'s result.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{$R$} \coqdockw{Type}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{$R$} \coqdocvar{Type@}\{\coqdocvar{Top}.94\}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdocvar{Type@}\{\coqdocvar{Top}.95\}
+
+\coqdocemptyline
+
+\texttt{\coqcl~ Top.94}
+
+~~~~~~~\texttt{Top.95 |= Top.94 < Top.95}
+
+~~~~~~~~~~~~~~~~~~~~~~~~\texttt{Top.95 < Top.93 ~\coqcr}
+
+
+
+The Coq's unifier algorithm in this case looks for a universe levels
+\coqdocvar{Top}.95, which can be larger than the level of \coqdocdefinition{$R$}'s argument level
+\coqdocvar{Top}.94, but smaller than the one of \coqdocdefinition{$R$} itself (i.e., \coqdocvar{Top}.93). In
+the absence of other constraints, such system of equalities is easily
+satisfiable.
+
+
+However, the attempt to apply \coqdocdefinition{$R$} to \textit{itself} immediately leads to an
+error reported, as the system cannot infer the level of the result, by
+means of solving a system of universe level inequations, therefore,
+preventing meta-circular paradoxes.
+
+
+
+
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocdefinition{$R$} \coqdocdefinition{$R$}.\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdocvar{The} \coqdocvar{term} "R" \coqdocvar{has} \coqdockw{type} "forall A : Type@\{Top.93\}, A -> A"\coqdoceol
+\coqdocnoindent
+\coqdocvar{while} \coqdocvar{it} \coqdockw{is} \coqdocvar{expected} \coqdocvar{to} \coqdocvar{have} \coqdockw{type} "?A"\coqdoceol
+\coqdocnoindent
+(\coqdocvar{unable} \coqdocvar{to} \coqdocvar{find} \coqdocvariable{a} \coqdocvar{well}-\coqdocvar{typed} \coqdocvar{instantiation} \coqdockw{for} "?A": \coqdocvar{cannot} \coqdocvar{ensure} \coqdocvar{that}\coqdoceol
+\coqdocnoindent
+"Type@\{Top.93+1\}" \coqdockw{is} \coqdocvariable{a} \coqdocvar{subtype} \coqdockw{\texttt{\emph{of}}} "Type@\{Top.93\}").
+
+\coqdocemptyline
+
+
+The solution to this problem is to think of the two occurrences \coqdocdefinition{$R$} in
+the last example as of inhabitants of \textit{different} universes, so that
+the \coqdocdefinition{$R$}-``function'' belongs to the universe with a higher level number
+than \coqdocdefinition{$R$}-``argument''. Checking this scenario requires supporting a more
+flexible form of universe polymorphism, which can assign different
+universe levels to different occurrences of the same definition in a
+common expression, and in this sense reminds \textit{let-polymorphism}
+~\cite[\S 22.7]{Pierce:BOOK02}\index{let-polymorphism}.  This
+feature was introduced in Coq since version
+8.5~\cite{Sozeau-Tabareau:ITP14}, and it allows us to redefine \coqdocdefinition{$R$}
+as universe-polymorphic via the new \coqdocvar{Polymorphic} \ccom{Polymorphic}
+keyword.\footnote{More documentation on universe polymorphism is
+available
+at \url{https://coq.inria.fr/distrib/V8.5beta2/refman/Reference-Manual032.html}.}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdocvar{Polymorphic} \coqdockw{Definition} \coqdocvar{RPoly} \{\coqdocvar{A} : \coqdockw{Type}\} (\coqdocvar{a} : \coqdocvar{A}) : \coqdocvar{A} := \coqdocvar{a}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{About} \coqdocvar{RPoly}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{RPoly} : \coqdockw{\ensuremath{\forall}} \coqdocvariable{A} : \coqdocvar{Type@}\{\coqdocvar{Top}.96\}, \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvariable{A}
+
+\coqdocemptyline
+
+\texttt{\coqcl~Top.96 |= ~\coqcr}
+
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{RPoly} \coqdockw{is} \coqdocvar{universe} \coqdocvar{polymorphic}\coqdoceol
+\coqdocnoindent
+\coqdocvar{Argument} \coqdocvariable{A} \coqdockw{is} \coqdocvar{implicit} \coqdocinductive{and} \coqdocvar{maximally} \coqdocvar{inserted}\coqdoceol
+\coqdocnoindent
+...
+
+\coqdocemptyline
+
+
+We can now apply \coqdocdefinition{RPoly} to itself using the following syntax.
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{selfRPoly} := \coqdocvar{RPoly} (@\coqdocvar{RPoly}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{selfRPoly} \coqdockw{is} \coqdocvar{defined}
+
+\coqdocemptyline
+
+
+Let us now check the details of universes participating in
+\coqdocdefinition{selfRPoly}'s typing.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{selfRPoly}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{selfRPoly} = \coqdoceol
+\coqdocnoindent
+\coqdocvar{RPoly@}\{\coqdocvar{Top}.97\} (@\coqdocvar{RPoly@}\{\coqdocvar{Top}.98\})\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} \coqdocvariable{A} : \coqdocvar{Type@}\{\coqdocvar{Top}.98\}, \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvariable{A}
+
+\coqdocemptyline
+ 
+\texttt{\coqcl ~ Top.97}
+
+~~~~\texttt{   Top.98 |= Top.98 < Top.97}
+
+~~~~~\texttt{~\coqcr}
+
+
+
+The display above demonstrates that the two occurrences of \coqdocdefinition{RPoly}
+were assumed by the typing algorithm to belong to different universes:
+\coqdocvar{Top}.97 for the function and \coqdocvar{Top}.98 for the argument,
+correspondingly. In the absence of additional additional constraints,
+the inequality between them can be trivially satisfied by assuming
+\coqdocvar{Top}.98 < \coqdocvar{Top}.97.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}

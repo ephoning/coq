@@ -1,0 +1,1404 @@
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+
+
+
+\chapter{Encoding Mathematical Structures}
+\label{ch:depstruct}
+ 
+
+
+
+
+Long before programming has been established as a discipline,
+mathematics came to be perceived as a science of building
+abstractions and summarizing important properties of various entities
+necessary for describing nature's phenomenons.\footnote{In
+addition to being a science of rewriting, as we have already covered
+in Chapter~\ref{ch:eqrew}.} From the basic course of algebra, we are
+familiar with a number of mathematical structures, such as monoids,
+groups, rings, fields etc., which couple a \textit{carrier} set (or a number of
+sets), a number of operations on it (them), and a collection of
+properties of the set itself and operations on them.
+
+
+From a working programmer's perspective, a notion of a mathematical
+abstract structure is reminiscent to a notion of a class from
+object-oriented programming, modules from Standard ML and type
+classes~\cite{Wadler-Blott:POPL89} from Haskell: all these
+mechanisms are targeted to solve the same goal: \textit{package} a number of
+operations manipulating with some data, while abstracting of a
+particular implementation of this data itself. What neither of these
+programming mechanisms is capable of doing, comparing to mathematics,
+is enforcing the requirement for one to provide the \textit{proofs} of
+properties, which restrict the operations on the data structure. For
+instance, one can implement a type class for a \textit{lattice} in Haskell as
+follows: \index{type classes}\index{Haskell}
+
+
+\begin{verbatim}
+  class Lattice a where
+    bot :: a
+    top :: a
+    pre :: a -> a -> Bool
+    lub :: a -> a -> a
+    glb :: a -> a -> a
+\end{verbatim}
+
+
+That is, the class \texttt{Lattice} is parametrized by a \textit{carrier}
+type \texttt{a}, and provides the abstract interfaces for top and
+bottom elements of the lattice, as well as for the ordering predicate
+\texttt{pre} and the binary \textit{least-upper-bound} and
+\textit{greatest-lower-bound} operations. What this class cannot capture is a
+number of restrictions, for instance, that the \texttt{pre} relation
+should be transitive, reflexive and antisymmetric. That said, one can
+instantiate the \texttt{Lattice} class, e.g., for integers,
+\index{lattice} providing an implementation of \texttt{pre}, which
+is \textit{not} a partial order (e.g., just constant \texttt{true}). While
+this relaxed approach is supposedly fine for the programming needs, as
+the type classes are used solely for computing, not the reasoning
+about the correctness of the computations, this is certainly
+unsatisfactory from the mathematical perspective. Without the
+possibility to establish and enforce the necessary properties of a
+mathematical structure's operations, we would not be able to carry out
+any sort of sound formal reasoning, as we simply could not distinguish
+a ``correct'' implementation from a flawed one.
+
+
+Luckily, Coq's ability to work with dependent types and combine
+programs and propositions about them in the same language, as we've
+already witnessed in the previous chapters, makes it possible to
+define mathematical structures with a necessary degree of rigour and
+describe their properties precisely by means of stating them as
+\textit{types} (i.e., propositions) of the appropriate implementation's
+parameters. Therefore, any faithful instance of an abstract
+mathematical structure implemented this way, would be enforced to
+provide not just the \textit{carrier} and implementations of the declared
+operations but also \textit{proofs} of propositions that constrain these
+operations and the carrier.
+
+
+In this chapter we will learn how to encode common algebraic data
+structures in Coq in a way very similar to how data structures are
+encoded in languages like C (with a bit of Haskell-ish type class-like
+machinery), so the representation, unlike the one in C or Haskell,
+would allow for flexible and generic reasoning about the structures'
+properties. In the process, we will meet some old friends from the
+course of abstract algebra---partial commutative monoids, and implement
+them using Coq's native constructs: dependent records and canonical
+structures.
+
+
+As usual, we will require a number of Ssreflect package imported.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{\textsf{{From}}} \coqdocvar{mathcomp}\coqdoceol
+\coqdocnoindent
+\coqdockw{Require} \coqdockw{Import} \coqdocvar{ssreflect} \coqdocvar{ssrbool} \coqdocvar{ssrnat} \coqdocvar{eqtype} \coqdocvar{ssrfun}.\coqdoceol
+\coqdocemptyline
+\coqdocemptyline
+\end{coqdoccode}
+
+
+We will also require to execute a number of Vernacular commands
+simplifying the handling of implicit datatype arguments.
+
+
+\ccom{Set Implicit Arguments}
+\ccom{Unset Strict Implicit}
+\ccom{Unset Printing Implicit}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Set Implicit Arguments}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Unset} \coqdockw{Strict} \coqdockw{Implicit}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Unset} \coqdockw{Printing} \coqdockw{Implicit} \coqdocvar{Defensive}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\section{Encoding partial commutative monoids}
+
+
+\label{sec:pcms}
+
+
+\index{partial commutative monoid}
+\index{PCM|see {partial commutative monoid}}
+
+
+We will be using partial commutative monoids (PCMs) as an illustrative
+example of a simple algebraic data structure, a subject of encoding
+and formalization. A PCM is defined as an algebraic structure with a
+carrier set \coqdocvariable{U}, abstract binary ``join'' operation $\join$ and a unit
+element $\unit$.\footnote{Sometimes also referred to as an
+\emph{identity} or \emph{neutral} element.}\index{unit element}
+\index{join operation} The join operation is required to be
+associative and commutative, and for the unit element the left and
+right identity equalities should hold. Moreover, partiality means that
+the operation $\join$ might be undefined for some pairs of elements
+\coqdocvariable{a} and \coqdocvariable{b} (and in this case it is denoted as $a \join b =
+\bot$). PCMs are fairly ubiquitous: in particular, natural numbers
+with addition and multiplication, sets with a disjoin union,
+partially-defined functions with a point-wise union, are all PCM
+instances. Furthermore, partial commutative monoids are omnipresent in
+program verification~\cite{Nanevski-al:POPL10}, as they capture
+exactly the properties of \textit{heaps}, as well as the effect of programs
+that can be executed in
+parallel~\cite{Nanevski-al:ESOP14}. Therefore, it is useful to have
+PCMs formalized as a structure, so they could be employed for future
+reasoning.
+
+
+\index{identity element|see {unit element}}
+
+
+\newpage
+
+
+\subsection{Describing algebraic data structures via dependent records}
+
+
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Module} \coqdocvar{PCMDef}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+In Section~\ref{sec:exists} of Chapter~\ref{ch:logic} we have
+already seen a use of a dependent pair type, exemplified by the Coq's
+definition of the universal quantification.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{ex}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocinductive{ex} (\coqdocvariable{A} : \coqdockw{Type}) (\coqdocvar{P} : \coqdocvariable{A} \ensuremath{\rightarrow} \coqdockw{Prop}) : \coqdockw{Prop} :=\coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{ex\_intro} : \coqdockw{\ensuremath{\forall}} \coqdocvariable{x} : \coqdocvariable{A}, \coqdocvar{P} \coqdocvariable{x} \ensuremath{\rightarrow} \coqdocinductive{ex} \coqdocvar{P}
+
+\coqdocemptyline
+
+
+The only constructor \coqdocvar{ex\_intro} of the predicate \coqdocinductive{ex}, whose type is a
+dependent function type, is a way to encode a $\Sigma$-type of a
+dependent pair, such that its second component's type \textit{depends} on the
+value of the first one.\index{dependent pair} More specifically, the
+result of the existential quantification's encoding in Coq is a
+dependent pair $(\Sigma x:A, P~x)$, such that the proposition in
+the second component is determined by the value of the first
+component~\coqdocvariable{x}.
+
+
+\index{dependent records}
+
+
+Coq provides an alternative way to encode \textit{iterated} dependent pairs
+via the mechanism of \textit{dependent records}, also allowing one to give
+names to the subsequent components. Dependent records are defined
+using the \coqdockw{Record} command. Getting back to our PCM example, we
+illustrate the use of dependent records by the following definition of
+the abstract PCM structure.
+
+
+\index{mixins}
+\ccom{Record}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Record} \coqdocvar{mixin\_of} (\coqdocvar{T} : \coqdockw{Type}) := \coqdocvar{Mixin} \{\coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{valid\_op} : \coqdocvar{T} \ensuremath{\rightarrow} \coqdocvar{bool};\coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{join\_op} : \coqdocvar{T} \ensuremath{\rightarrow} \coqdocvar{T} \ensuremath{\rightarrow} \coqdocvar{T};\coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{unit\_op} : \coqdocvar{T};\coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{\_} : \coqdocvar{commutative} \coqdocvar{join\_op};\coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{\_} : \coqdocvar{associative} \coqdocvar{join\_op};\coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{\_} : \coqdocvar{left\_id} \coqdocvar{unit\_op} \coqdocvar{join\_op};\coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{\_} : \coqdockw{\ensuremath{\forall}} \coqdocvar{x} \coqdocvar{y}, \coqdocvar{valid\_op} (\coqdocvar{join\_op} \coqdocvar{x} \coqdocvar{y}) \ensuremath{\rightarrow} \coqdocvar{valid\_op} \coqdocvar{x}; \coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{\_} : \coqdocvar{valid\_op} \coqdocvar{unit\_op} \coqdoceol
+\coqdocnoindent
+\}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocrecord{mixin\_of} \coqdockw{is} \coqdocvar{defined}\coqdoceol
+\coqdocnoindent
+\coqdocvar{mixin\_of\_rect} \coqdockw{is} \coqdocvar{defined}\coqdoceol
+\coqdocnoindent
+\coqdocvar{mixin\_of\_ind} \coqdockw{is} \coqdocvar{defined}\coqdoceol
+\coqdocnoindent
+\coqdocvar{mixin\_of\_rec} \coqdockw{is} \coqdocvar{defined}\coqdoceol
+\coqdocnoindent
+\coqdocprojection{valid\_op} \coqdockw{is} \coqdocvar{defined}\coqdoceol
+\coqdocnoindent
+\coqdocprojection{join\_op} \coqdockw{is} \coqdocvar{defined}\coqdoceol
+\coqdocnoindent
+\coqdocprojection{unit\_op} \coqdockw{is} \coqdocvar{defined}
+
+\coqdocemptyline
+
+
+\index{record types|see {dependent records}}
+
+
+The syntax of Coq's dependent records is reminiscent to the one of
+records in C. Following Ssreflect's naming
+pattern~\cite{Garillot-al:TPHOL09}, we call the record type (defined
+in a dedicated module for the reasons explained further) \coqdocrecord{mixin\_of}
+and its only constructor \coqdocconstructor{Mixin}. The reasons for such naming
+convention will be explained soon, and for now let us discuss the
+definition. The PCM record type is parametrized over the carrier type
+\coqdocvariable{T}, which determines the carrier set of a PCM. It then lists three
+\textit{named} fields: \coqdocprojection{join\_op} describes an implementation of the PCM's
+binary operation, \coqdocprojection{unit\_op} defines the unit element, finally, the
+\coqdocprojection{valid\_op} predicate determines whether a particular element of the
+carrier set \coqdocvariable{T} is valid or not, and, thus, serves as a way to express
+the partiality of the \coqdocprojection{join\_op} operation (the result is undefined,
+whenever the corresponding value of \coqdocvariable{T} is non-valid). Next, the PCM
+record lists five unnamed PCM \textit{properties}, which should be satisfied
+whenever the record is instantiated and are defined using the standard
+propositions from Ssreflect's \coqdoclibrary{ssrfun} \ssrm{ssrfun} module (see
+Section~\ref{sec:funprops}). In particular, the PCM type definition
+requires the operation to be \coqdocdefinition{commutative} and \coqdocdefinition{associative}. It also
+states that if $a \join b \neq \bot$ then $a \neq \bot$ (the same
+statement about $b$ can be proved by commutativity), and that the unit
+element is a valid one.
+
+
+Notice that in the definition of the \coqdocrecord{mixin\_of} record type, the types
+of some of the later fields (e.g., any of the properties) depend on
+the values of fields declared earlier (e.g., \coqdocprojection{unit\_op} and \coqdocprojection{join\_op}),
+which makes \coqdocrecord{mixin\_of} to be a truly dependent type.
+
+
+Upon describing the record, a number of auxiliary definitions have been
+generated by Coq automatically. Along with the usual recursion and
+induction principles, the system also generated three \textit{getters},
+\coqdocprojection{valid\_op}, \coqdocprojection{join\_op} and \coqdocprojection{unit\_op} \index{getters} for the record's
+named fields. That is, similarly to Haskell's syntax, given an
+instance of a PCM, one can extract, for example, its operation, via
+the following getter function.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{valid\_op}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocprojection{valid\_op}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} \coqdocvariable{T} : \coqdockw{Type}, \coqdocrecord{mixin\_of} \coqdocvariable{T} \ensuremath{\rightarrow} \coqdocvariable{T} \ensuremath{\rightarrow} \coqdocinductive{bool}
+
+\coqdocemptyline
+
+
+Coq supports the syntax for anonymous record fields (via the
+underscore \coqdocvar{\_}), so getters for them are not generated. We have
+decided to make the property fields of \coqdocrecord{mixin\_of} to be anonymous,
+since they will usually appear only in the proofs, where the structure
+is going to be decomposed by case analysis anyway, as we will soon
+see.
+
+
+We can now prove a number of facts about the structure, very much in
+the spirit of the facts that are being proven in the algebra course.
+For instance, the following lemma states that \coqdocprojection{unit\_op} is also the
+\textit{right unit}, in addition to it being the left unit, as encoded by the
+structure's definition.
+
+
+\index{right unit}
+\index{left unit}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{r\_unit} \coqdocvar{T} (\coqdocvar{pcm}: \coqdocvar{mixin\_of} \coqdocvar{T}) (\coqdocvar{t}: \coqdocvar{T}) : (\coqdocvar{join\_op} \coqdocvar{pcm} \coqdocvar{t} (\coqdocvar{unit\_op} \coqdocvar{pcm})) = \coqdocvar{t}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{case}: \coqdocvar{pcm}\ensuremath{\Rightarrow}\coqdocvar{\_} \coqdocvar{join} \coqdocvar{unit} \coqdocvar{Hc} \coqdocvar{\_} \coqdocvar{Hlu} \coqdocvar{\_} \coqdocvar{\_} /=.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{1.00em}
+\coqdocvariable{T} : \coqdockw{Type}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvariable{t} : \coqdocvariable{T}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocdefinition{join} : \coqdocvariable{T} \ensuremath{\rightarrow} \coqdocvariable{T} \ensuremath{\rightarrow} \coqdocvariable{T}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocdefinition{unit} : \coqdocvariable{T}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{Hc} : \coqdocdefinition{commutative} \coqdocdefinition{join}\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{Hlu} : \coqdocdefinition{left\_id} \coqdocdefinition{unit} \coqdocdefinition{join}\coqdoceol
+\coqdocindent{1.00em}
+============================\coqdoceol
+\coqdocindent{1.50em}
+\coqdocdefinition{join} \coqdocvariable{t} \coqdocdefinition{unit} = \coqdocvariable{t}
+
+\coqdocemptyline
+
+
+The first line of the proof demonstrates that dependent records in Coq
+are actually just product types in disguise, so the proofs about them
+should be done by case analysis. In this particular case, we decompose
+the \coqdocabbreviation{pcm} argument of the lemma into its components, replacing those
+of no interest with wildcards \coqdocvar{\_}. The \coqdocdefinition{join} and \coqdocdefinition{unit}, therefore,
+bind the operation and the identity element, whereas \coqdocvar{Hc} and \coqdocvar{Hlu}
+are the commutativity and left-unit properties, named explicitly in
+the scope of the proof. The trailing Ssreflect's simplification
+tactical \texttt{/=}\ssrtl{/=} replaces the calls to the getters in
+the goal (e.g., \coqdocprojection{join\_op} \coqdocabbreviation{pcm}) by the bound identifiers. The proof can
+be now accomplished by a series of rewritings by the \coqdocvar{Hc} and \coqdocvar{Hlu}
+hypotheses.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{rewrite} \coqdocvar{Hc} \coqdocvar{Hlu}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\subsection{An alternative definition}
+
+
+
+
+In the previous section we have seen how to define the algebraic
+structure of PCMs using Coq's dependent record mechanism. The same PCM
+structure could be alternatively defined using the familiar syntax for
+inductive types, as a datatype with precisely one constructor:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocvar{mixin\_of'} (\coqdocvar{T}: \coqdockw{Type}) := \coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{Mixin'} (\coqdocvar{valid\_op}: \coqdocvar{T} \ensuremath{\rightarrow} \coqdocvar{bool}) (\coqdocvar{join\_op} : \coqdocvar{T} \ensuremath{\rightarrow} \coqdocvar{T} \ensuremath{\rightarrow} \coqdocvar{T}) (\coqdocvar{unit\_op}: \coqdocvar{T}) \coqdockw{\texttt{\emph{of}}}\coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{commutative} \coqdocvar{join\_op} \&\coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{associative} \coqdocvar{join\_op} \&\coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{left\_id} \coqdocvar{unit\_op} \coqdocvar{join\_op} \&\coqdoceol
+\coqdocindent{2.00em}
+\coqdockw{\ensuremath{\forall}} \coqdocvar{x} \coqdocvar{y}, \coqdocvar{valid\_op} (\coqdocvar{join\_op} \coqdocvar{x} \coqdocvar{y}) \ensuremath{\rightarrow} \coqdocvar{valid\_op} \coqdocvar{x} \&\coqdoceol
+\coqdocindent{2.00em}
+\coqdocvar{valid\_op} \coqdocvar{unit\_op}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Although this definition seems more principled and is closer to what
+we have seen in previous chapters, the record notation is more
+convenient in this case, as it defined getters automatically as well
+as allows one to express inheritance between data structures by means
+of the coercion operator \texttt{:>}
+operator~\cite{Garillot-al:TPHOL09}.\footnote{In the next section
+will show a different way to encode implicit inheritance, though.}
+
+
+\subsection{Packaging the structure from mixins}
+
+
+\label{sec:packaging}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Section} \coqdocvar{Packing}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\index{packaging}
+
+
+By now, we have defined a structure of a PCM ``interface'' in a form of
+a set of the components (i.e., the carrier set and operations on it)
+and their properties. However, it might be the case that the same
+carrier set (which we represented by the type parameter \coqdocvariable{T}), should
+be given properties from other algebraic data structures (e.g.,
+lattices), which are essentially orthogonal to those of a
+PCM. Moreover, at some point one might be interested in implementing
+the proper inheritance of the PCM structure with respect to the
+carrier type \coqdocvariable{T}. More precisely, if the type \coqdocvariable{T} comes with some
+additional operations, they should be available from it, even if it's
+seen as being ``wrapped'' into the PCM structure. That said, if \coqdocvariable{T} is
+proven to be a PCM, one should be able to use this fact as well as the
+functions, defined on \coqdocvariable{T} separately.
+
+
+\index{packed classes}
+
+
+These two problems, namely, (a) combining together several structures
+into one, and (b) implementing inheritance and proper mix-in
+composition, can be done in Coq using the description pattern, known
+as ``packed classes''~\cite{Garillot-al:TPHOL09}. The idea of the
+approach is to define a ``wrapper'' record type, which would ``pack''
+several mix-ins together, similar to how it is done in object-oriented
+languages with implicit trait composition, e.g.,
+Scala~\cite{Odersky-Zenger:OOPSLA05}.\footnote{Using this mechanism
+will, however, afford us a greater degree of flexibility, as it is up
+to the Coq programmer to define the resolution policy of the combined
+record's members, rather than to rely on an implicit mechanism of
+field linearization.}
+
+
+\index{Scala}\index{traits}
+\label{ref:pack_type}
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Structure} \coqdocvar{pack\_type} : \coqdockw{Type} := \coqdocvar{Pack} \{\coqdockw{type} : \coqdockw{Type}; \coqdocvar{\_} : \coqdocvar{mixin\_of} \coqdockw{type}\}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The dependent data structure \coqdocrecord{pack\_type} declares two fields: the
+field \coqdockw{type} of type \coqdockw{Type}, which described the carrier type of the
+PCM instance, and the actual PCM structure (without an explicit name
+given) of type (\coqdocrecord{mixin\_of} \coqdockw{type}). That is, in order to construct an
+instance of \coqdocrecord{pack\_type}, one will have to provide \textit{both} arguments:
+the carrier set and a PCM structure for it.
+
+
+Next, we specify that the field \coqdockw{type} of the \coqdocrecord{pack\_type} should be
+also considered as a \textit{coercion}, that is, whenever we have a value of
+type \coqdocrecord{pack\_type}, whose field \coqdockw{type} is some \coqdocvariable{T}, it can be implicitly
+seen as an element of type \coqdocvariable{T}. The coercion is specified locally, so
+it will work only in the scope of the current section (i.e.,
+\coqdocsection{Packing}) by using Coq's \coqdockw{Local} \coqdockw{Coercion} command. We address the
+reader to Chapter 18 of the Coq Reference Manual~\cite{Coq-manual}
+for more details of the implicit coercions.
+
+
+\ccom{Local Coercion}
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Local} \coqdockw{Coercion} \coqdockw{type} : \coqdocvar{pack\_type} \texttt{>->} \coqdocvar{Sortclass}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\index{Sortclass@\emph{Sortclass}}
+
+
+The \texttt{>->} simply specifies the fact of the coercion, whereas
+\coqdocvar{Sortclass} is an abstract class of sorts, so the whole command
+postulates that whenever an instance of \coqdocrecord{pack\_type} should be coerced
+into an element of an arbitrary sort, it should be done via referring
+to is \coqdockw{type} field.
+
+
+Next, in the same section, we provide a number of abbreviations to
+simplify the work with the PCM packed structure and prepare it to be
+exported by clients.
+
+
+\begin{coqdoccode}
+\coqdocnoindent
+\coqdockw{Variable} \coqdocvar{cT}: \coqdocvar{pack\_type}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{pcm\_struct} : \coqdocvar{mixin\_of} \coqdocvar{cT} := \coqdoceol
+\coqdocindent{2.00em}
+\coqdockw{let}: \coqdocvar{Pack} \coqdocvar{\_} \coqdocvar{c} := \coqdocvar{cT} \coqdockw{return} \coqdocvar{mixin\_of} \coqdocvar{cT} \coqdoctac{in} \coqdocvar{c}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The function \coqdocdefinition{pcm\_struct} extracts the PCM structure from the ``packed''
+instance. Notice the use of dependent pattern matching
+\index{dependent pattern matching} in the \coqdockw{let}:-statement with the
+explicit \coqdockw{return}-statement, so Coq would be able to refine the result
+of the whole expression basing on the dependent type of the \coqdocvariable{c}
+component of the data structure \coqdocvariable{cT}, which is being scrutinized. With
+the help of this definition, we can now define three aliases for the
+PCM's key components, ``lifted'' to the packed data structure.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{valid} := \coqdocvar{valid\_op} \coqdocvar{pcm\_struct}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{join} := \coqdocvar{join\_op} \coqdocvar{pcm\_struct}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{unit} := \coqdocvar{unit\_op} \coqdocvar{pcm\_struct}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{End} \coqdocvar{Packing}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Now, as the packaging mechanism and the aliases are properly defined,
+we come to the last step of the PCM package description: preparing the
+batch of definitions, notations and facts to be exported to the
+client. Following the pattern of nesting modules, presented in
+Section~\ref{sec:secmod}, we put all the entities to be exported
+into the inner module \coqdocvar{Exports}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Module} \coqdocvar{Exports}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Notation} \coqdocvar{pcm} := \coqdocvar{pack\_type}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Notation} \coqdocvar{PCMMixin} := \coqdocvar{Mixin}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Notation} \coqdocvar{PCM} \coqdocvar{T} \coqdocvar{m} := (@\coqdocvar{Pack} \coqdocvar{T} \coqdocvar{m}).\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Notation} "x \symbol{92}+ y" := (\coqdocvar{join} \coqdocvar{x} \coqdocvar{y}) (\coqdoctac{at} \coqdockw{level} 43, \coqdoctac{left} \coqdockw{associativity}).\coqdoceol
+\coqdocnoindent
+\coqdockw{Notation} \coqdocvar{valid} := \coqdocvar{valid}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Notation} \coqdocvar{Unit} := \coqdocvar{unit}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+We will have to define the coercion from the PCM structure with
+respect to its \coqdockw{type} field once again, as the previous one was
+defined locally for the section \coqdocsection{Packing}, and, hence, is invisible in
+this submodule.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Coercion} \coqdockw{type} : \coqdocvar{pack\_type} \texttt{>->} \coqdocvar{Sortclass}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\section{Properties of partial commutative monoids}
+
+
+
+
+Before we close the \coqdocvar{Exports} module of the \coqdocvar{PCMDef} package, it makes
+sense to supply as many properties to the clients, as it will be
+necessary for them to build the reasoning involving PCMs. In the
+traditions of proper encapsulation, \index{encapsulation} requiring
+to expose only the relevant and as abstract as possible elements of
+the interface to its clients, it is undesirable for users of the \coqdocabbreviation{pcm}
+datatype to perform any sort of analysis on the structure of the
+\coqdocrecord{mixin\_of} datatype, as it will lead to rather tedious and cumbersome
+proofs, which will first become a subject of massive changes, once we
+decide to change the implementation of the PCM mixin structure.
+
+
+This is why in this section we supply a number of properties of PCM
+elements and operations, derived from its structure, which we observe
+to be enough to build the reasoning with arbitrary PCM instances.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Section} \coqdocvar{PCMLemmas}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Variable} \coqdocvar{U} : \coqdocvar{pcm}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+For instance, the following lemma re-establishes the commutativity of
+the \symbol{92}+ operation:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{joinC} (\coqdocvar{x} \coqdocvar{y} : \coqdocvar{U}) : \coqdocvar{x} \symbol{92}+ \coqdocvar{y} = \coqdocvar{y} \symbol{92}+ \coqdocvar{x}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{case}: \coqdocvar{U} \coqdocvar{x} \coqdocvar{y}\ensuremath{\Rightarrow} \coqdocvar{tp} [\coqdocvar{v} \coqdocvar{j} \coqdocvar{z} \coqdocvar{Cj} *]; \coqdoctac{apply} \coqdocvar{Cj}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Notice that in order to make the proof to go through, we had to ``push''
+the PCM elements \coqdocvariable{x} and \coqdocvariable{y} to be the assumption of the goal before
+case-analysing on \coqdocvariable{U}. This is due to the fact that the structure of
+\coqdocvariable{U} affects the type of \coqdocvariable{x} and \coqdocvariable{y}, therefore destructing it by means
+of \coqdoctac{case} would change the representation of \coqdocvariable{x} and \coqdocvariable{y} as well,
+doing some rewriting and simplifications. Therefore, when \coqdocvariable{U} is being
+decomposed, all values, whose type depends on it (i.e., \coqdocvariable{x} and \coqdocvariable{y})
+should be in the scope of decomposition. The naming pattern $*$ helped
+us to give automatic names to all remaining assumptions, appearing
+from decomposition of \coqdocvariable{U}'s second component before moving it to the
+context before finishing the proof by applying the commutativity
+``field'' \coqdocvar{Cj}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{joinA} (\coqdocvar{x} \coqdocvar{y} \coqdocvar{z} : \coqdocvar{U}) : \coqdocvar{x} \symbol{92}+ (\coqdocvar{y} \symbol{92}+ \coqdocvar{z}) = \coqdocvar{x} \symbol{92}+ \coqdocvar{y} \symbol{92}+ \coqdocvar{z}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{case}: \coqdocvar{U} \coqdocvar{x} \coqdocvar{y} \coqdocvar{z}\ensuremath{\Rightarrow}\coqdocvar{tp} [\coqdocvar{v} \coqdocvar{j} \coqdocvar{z} \coqdocvar{Cj} \coqdocvar{Aj} *]; \coqdoctac{apply}: \coqdocvar{Aj}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\begin{exercise}[PCM laws] 
+Prove the rest of the PCM laws.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{joinAC} (\coqdocvar{x} \coqdocvar{y} \coqdocvar{z} : \coqdocvar{U}) : \coqdocvar{x} \symbol{92}+ \coqdocvar{y} \symbol{92}+ \coqdocvar{z} = \coqdocvar{x} \symbol{92}+ \coqdocvar{z} \symbol{92}+ \coqdocvar{y}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{joinCA} (\coqdocvar{x} \coqdocvar{y} \coqdocvar{z} : \coqdocvar{U}) : \coqdocvar{x} \symbol{92}+ (\coqdocvar{y} \symbol{92}+ \coqdocvar{z}) = \coqdocvar{y} \symbol{92}+ (\coqdocvar{x} \symbol{92}+ \coqdocvar{z}).\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{validL} (\coqdocvar{x} \coqdocvar{y} : \coqdocvar{U}) : \coqdocvar{valid} (\coqdocvar{x} \symbol{92}+ \coqdocvar{y}) \ensuremath{\rightarrow} \coqdocvar{valid} \coqdocvar{x}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{validR} (\coqdocvar{x} \coqdocvar{y} : \coqdocvar{U}) : \coqdocvar{valid} (\coqdocvar{x} \symbol{92}+ \coqdocvar{y}) \ensuremath{\rightarrow} \coqdocvar{valid} \coqdocvar{y}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{unitL} (\coqdocvar{x} : \coqdocvar{U}) : (@\coqdocvar{Unit} \coqdocvar{U}) \symbol{92}+ \coqdocvar{x} = \coqdocvar{x}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{unitR} (\coqdocvar{x} : \coqdocvar{U}) : \coqdocvar{x} \symbol{92}+ (@\coqdocvar{Unit} \coqdocvar{U}) = \coqdocvar{x}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{valid\_unit} : \coqdocvar{valid} (@\coqdocvar{Unit} \coqdocvar{U}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\end{exercise}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{End} \coqdocvar{PCMLemmas}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{End} \coqdocvar{Exports}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{End} \coqdocvar{PCMDef}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Export} \coqdocvar{PCMDef.Exports}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\section{Implementing inheritance hierarchies}
+
+
+
+
+\index{inheritance}
+
+
+By packaging an arbitrary type \coqdocvariable{T} into one record with the PCM
+structure in Section~\ref{sec:packaging} and supplying it with a
+specific implicit coercion, we have already achieved some degree of
+inheritance: any element of a PCM can be also perceived by the system
+in an appropriate context, as an element of its carrier type. 
+
+
+In this section, we will go even further and show how to build
+hierarchies of mathematical structures using the same way of encoding
+inheritance. We will use a \textit{cancellative PCM} as a running example.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Module} \coqdocvar{CancelPCM}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+PCMs with cancellation \index{cancellativity} extend ordinary PCMs
+with an extra property, that states that the equality $a \join b = a
+\join c$ for any $a$, $b$ and $c$, whenever $a \join b$ is defined,
+implies $b = c$. We express such property via an additional mixin
+record type, parametrized over an arbitrary PCM \coqdocvariable{U}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Record} \coqdocvar{mixin\_of} (\coqdocvar{U} : \coqdocvar{pcm}) := \coqdocvar{Mixin} \{\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{\_} : \coqdockw{\ensuremath{\forall}} \coqdocvar{a} \coqdocvar{b} \coqdocvar{c}: \coqdocvar{U}, \coqdocvar{valid} (\coqdocvar{a} \symbol{92}+ \coqdocvar{b}) \ensuremath{\rightarrow} \coqdocvar{a} \symbol{92}+ \coqdocvar{b} = \coqdocvar{a} \symbol{92}+ \coqdocvar{c} \ensuremath{\rightarrow} \coqdocvar{b} = \coqdocvar{c}\coqdoceol
+\coqdocnoindent
+\}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Notice that the validity of the sum \coqdocvariable{a} \symbol{92}+ \coqdocvariable{c} is not imposed, as it can
+be proven from propositional equality and the validity of \coqdocvariable{a} \symbol{92}+ \coqdocvariable{b}.
+
+
+We continue the definition by describing the standard packaging data
+structure.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Structure} \coqdocvar{pack\_type} : \coqdockw{Type} := \coqdocvar{Pack} \{\coqdocvar{pcmT} : \coqdocvar{pcm}; \coqdocvar{\_} : \coqdocvar{mixin\_of} \coqdocvar{pcmT}\}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Module} \coqdocvar{Exports}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Notation} \coqdocvar{cancel\_pcm} := \coqdocvar{pack\_type}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Notation} \coqdocvar{CancelPCMMixin} := \coqdocvar{Mixin}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Notation} \coqdocvar{CancelPCM} \coqdocvar{T} \coqdocvar{m}:= (@\coqdocvar{Pack} \coqdocvar{T} \coqdocvar{m}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+There is a tiny twist in the definition of the specific coercion,
+though, as now we it specifies that the instance of the packed data
+structure, describing the cancellative PCM, can be seen as an instance
+of the underlying PCM. The coercions are transitive, which means that
+the same instance can be coerced even further to \coqdocvariable{U}'s carrier type
+\coqdocvariable{T}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Coercion} \coqdocvar{pcmT} : \coqdocvar{pack\_type} \texttt{>->} \coqdocvar{pcm}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+We finish the definition of the cancellative PCM by providing its only
+important law, which is a direct consequence of the newly added
+property.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{cancel} (\coqdocvar{U}: \coqdocvar{cancel\_pcm}) (\coqdocvar{x} \coqdocvar{y} \coqdocvar{z}: \coqdocvar{U}): \coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{valid} (\coqdocvar{x} \symbol{92}+ \coqdocvar{y}) \ensuremath{\rightarrow} \coqdocvar{x} \symbol{92}+ \coqdocvar{y} = \coqdocvar{x} \symbol{92}+ \coqdocvar{z} \ensuremath{\rightarrow} \coqdocvar{y} = \coqdocvar{z}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{case}: \coqdocvar{U} \coqdocvar{x} \coqdocvar{y} \coqdocvar{z}\ensuremath{\Rightarrow}\coqdocvar{Up} [\coqdocvar{Hc}] \coqdocvar{x} \coqdocvar{y} \coqdocvar{z}; \coqdoctac{apply}: \coqdocvar{Hc}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{End} \coqdocvar{Exports}.\coqdoceol
+\coqdocnoindent
+\coqdockw{End} \coqdocvar{CancelPCM}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Export} \coqdocvar{CancelPCM.Exports}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The proof of the following lemma, combining commutativity and
+cancellativity, demonstrates how the properties of a cancellative PCM
+work in combination with the properties of its base PCM structure.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{cancelC} (\coqdocvar{U}: \coqdocvar{cancel\_pcm}) (\coqdocvar{x} \coqdocvar{y} \coqdocvar{z} : \coqdocvar{U}) :\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{valid} (\coqdocvar{y} \symbol{92}+ \coqdocvar{x} \symbol{92}+ \coqdocvar{z}) \ensuremath{\rightarrow} \coqdocvar{y} \symbol{92}+ \coqdocvar{x} = \coqdocvar{x} \symbol{92}+ \coqdocvar{z} \ensuremath{\rightarrow} \coqdocvar{y} = \coqdocvar{z}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{move}/\coqdocvar{validL}; \coqdoctac{rewrite} ![\coqdocvar{y} \symbol{92}+ \coqdocvar{\_}]\coqdocvar{joinC}; \coqdoctac{apply}: \coqdocvar{cancel}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\section{Instantiation and canonical structures}
+
+
+
+
+Now, as we have defined a PCM structure along with its specialized
+version, a cancellative PCM, it is time to see how to \textit{instantiate}
+these abstract definitions with concrete datatypes, i.e., \textit{prove} the
+latter ones to be instances of a PCM.
+
+
+\index{instantiation}
+
+
+\subsection{Defining arbitrary PCM instances}
+
+
+
+
+Natural numbers form a PCM, in particular, with addition as a join
+operation and zero as a unit element. The validity predicate is
+constant true, because the addition of two natural numbers is again a
+valid natural number. Therefore, we can instantiate the PCM structure
+for \coqdocinductive{nat} as follows, first by constructing the appropriate mixin.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{natPCMMixin} := \coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{PCMMixin} \coqdocvar{addnC} \coqdocvar{addnA} \coqdocvar{add0n} (\coqdockw{fun} \coqdocvar{x} \coqdocvar{y} \ensuremath{\Rightarrow} @\coqdocvar{id} \coqdocvar{true}) (\coqdocvar{erefl} \coqdocvar{\_}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The constructor \coqdocabbreviation{PCMMixin}, defined in Section~\ref{sec:packaging}
+is invoked with five parameters, all of which correspond to the
+properties, ensured by the PCM definition. The rest of the arguments,
+namely, the validity predicate, the join operation and the zero
+element are implicit and are soundly inferred by Coq's type inference
+engine from the types of lemmas, provided as propositional
+arguments. For instance, the first argument \coqdoclemma{addnC}, whose type is
+\coqdocdefinition{commutative} \coqdocvar{addn} makes it possible to infer that the join operation
+is the addition. In the same spirit, the third argument, \coqdoclemma{add0n} makes
+it unambiguous that the unit element is zero.
+
+
+After defining the PCM mixin, we can instantiate the PCM packed class
+for \coqdocinductive{nat} by the following definition:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{NatPCM} := \coqdocvar{PCM} \coqdocvar{nat} \coqdocvar{natPCMMixin}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+This definition will indeed work, although, being somewhat
+unsatisfactory. For example, assume we want to prove the following
+lemma for natural numbers treated as elements of a PCM, which should
+trivially follow from the PCM properties of \coqdocinductive{nat} with addition and
+zero:
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{add\_perm} (\coqdocvariable{a} \coqdocvariable{b} \coqdocvariable{c} : \coqdocinductive{nat}) : \coqdocvariable{a} \symbol{92}+ (\coqdocvariable{b} \symbol{92}+ \coqdocvariable{c}) = \coqdocvariable{a} \symbol{92}+ (\coqdocvariable{c} \symbol{92}+ \coqdocvariable{b}).
+
+\coqdocemptyline
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocvar{The} \coqdocvar{term} "a" \coqdocvar{has} \coqdockw{type} "nat" \coqdocvar{while} \coqdocvar{it} \coqdockw{is} \coqdocvar{expected} \coqdocvar{to} \coqdocvar{\texttt{\emph{have}}} \coqdockw{type} "PCMDef.type ?135".
+
+\coqdocemptyline
+
+
+This error is due to the fact that Coq is unable to recognize natural
+numbers to be elements of the corresponding PCM, and one possible way
+to fix it is to declare the parameters of the lemma \coqdocvar{add\_perm}, \coqdocvariable{a},
+\coqdocvariable{b} and \coqdocvariable{c} to be of type \coqdocdefinition{NatPCM} rather than \coqdocinductive{nat}. This is still
+awkward: it means that the lemmas cannot be just applied to mere
+natural numbers, instead they need to be \textit{coerced} to the \coqdocdefinition{NatPCM}
+type explicitly whenever we need to apply this lemma. Coq suggests a
+better solution to this problem by providing a mechanism of \textit{canonical
+structures} as a flexible way to specify \textit{how exactly} each concrete
+datatype should be embedded into an abstract mathematical
+structure~\cite{Saibi:PhD}.
+
+
+\index{canonical structures} 
+
+
+The Vernacular syntax for defining canonical structures is similar to
+the one of definitions and makes use of the \texttt{Canonical}
+command.\footnote{The command \texttt{Canonical Structure}
+\ccom{Canonical Structure} serves the same purpose.}\ccom{Canonical}
+The following definition defines \coqdocdefinition{natPCM} to be a canonical instance
+of the PCM structure for natural numbers.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Canonical} \coqdocvar{natPCM} := \coqdocvar{PCM} \coqdocvar{nat} \coqdocvar{natPCMMixin}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+To see what kind of effect it takes, we will print all \textit{canonical
+projections}, currently available in the context of the module. 
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{Canonical} \coqdocvar{Projections}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+...\coqdoceol
+\coqdocnoindent
+\coqdocinductive{nat} \ensuremath{\leftarrow} \coqdocvar{PCMDef.type} ( \coqdocdefinition{natPCM} )\coqdoceol
+\coqdocnoindent
+\coqdocvar{pred\_of\_mem} \ensuremath{\leftarrow} \coqdocvar{topred} ( \coqdocvar{memPredType} )\coqdoceol
+\coqdocnoindent
+\coqdocvar{pred\_of\_simpl} \ensuremath{\leftarrow} \coqdocvar{topred} ( \coqdocvar{simplPredType} )\coqdoceol
+\coqdocnoindent
+\coqdocvar{sig} \ensuremath{\leftarrow} \coqdocvar{sub\_sort} ( \coqdocvar{sig\_subType} )\coqdoceol
+\coqdocnoindent
+\coqdocvar{number} \ensuremath{\leftarrow} \coqdocvar{sub\_sort} ( \coqdocvar{number\_subType} )\coqdoceol
+\coqdocnoindent
+...
+
+\coqdocemptyline
+
+
+\index{canonical projections}
+The displayed list enumerates all \textit{canonical projections} that specify,
+which implicit canonical instances are currently available and will be
+picked implicitly for appropriate types (on the left of the arrow
+\ensuremath{\leftarrow}). That is, for example, whenever an instance of \coqdocinductive{nat} is
+available, but in fact it should be treated as the \coqdockw{type} field of the
+\coqdocabbreviation{PCM} structure (with all getters typed properly), the canonical
+instance \coqdocdefinition{natPCM} will be automatically picked by Coq for such
+embedding. In other words, the machinery of canonical structures
+allows us to define the policy for finding an appropriate \textit{dictionary}
+of functions and propositions for an arbitrary concrete datatype,
+whenever it is supposed to have them. In fact, upon declaring the
+canonical structure \coqdocdefinition{natPCM}, the canonical projections are
+registered by Coq for all \textit{named} fields of the record \coqdocabbreviation{PCM}, which is
+precisely just the \coqdockw{type} field, since \coqdocabbreviation{PCM}'s second component of
+type (\coqdocrecord{mixin\_of} \coqdockw{type}) was left unnamed (see the definition of
+the record \coqdocrecord{pack\_type} on page~\pageref{ref:pack_type}).
+
+
+The mechanism of defining canonical structures for concrete data types
+is reminiscent of the resolution of type class constraints in
+Haskell~\cite{Wadler-Blott:POPL89}. However, unlike Haskell, where
+the resolution algorithm for type class instances is \textit{hard-coded}, in
+the case of Coq one can actually \textit{program} the way the canonical
+instances are resolved.\footnote{In addition to canonical structures,
+Coq also provides mechanism of type classes, which are even more
+reminiscent of the ones from Haskell, and, similar to the latter
+ones, do not provide a way to program the resolution
+policy~\cite{Sozeau-Oury:TPHOL08}.} This leads to a very powerful
+technique to automate the process of theorem proving by encoding the
+way to find and apply necessary lemmas, whenever it is required. These
+techniques are, however, outside of the scope of this course, so we
+direct the interested reader to the relevant research papers that
+describe the patterns of programming with canonical
+structures~\cite{Gontier-al:ICFP11,Mahboubi-Tassi:ITP13,Garillot:PhD}.
+
+
+Similarly to the way we have defined a canonical instance of PCM for
+\coqdocinductive{nat}, we can define a canonical instance of a PCM with
+cancellativity. In order to instantiate it, we will, however, need to
+prove the following lemma, which states that the addition on natural
+numbers is indeed cancellative, so this fact will be used as an
+argument for the \coqdocabbreviation{CancelPCMMixin} constructor.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{cancelNat} : \coqdockw{\ensuremath{\forall}} \coqdocvar{a} \coqdocvar{b} \coqdocvar{c}: \coqdocvar{nat}, \coqdocvar{true} \ensuremath{\rightarrow} \coqdocvar{a} + \coqdocvar{b} = \coqdocvar{a} + \coqdocvar{c} \ensuremath{\rightarrow} \coqdocvar{b} = \coqdocvar{c}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow} \coqdocvar{a} \coqdocvar{b} \coqdocvar{c}; \coqdoctac{elim}: \coqdocvar{a}=>// \coqdocvar{n} /(\coqdocvar{\_} \coqdocvar{is\_true\_true}) \coqdocvar{Hn} \coqdocvar{\_} \coqdocvar{H}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{apply}: \coqdocvar{Hn}; \coqdoctac{rewrite} !\coqdocvar{addSn} \coqdoctac{in} \coqdocvar{H}; \coqdoctac{move}/\coqdocvar{eq\_add\_S}: \coqdocvar{H}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Notice the first assumption \coqdocconstructor{true} of the lemma. Here it serves as a
+placeholder for the general validity hypothesis \coqdocabbreviation{valid} (\coqdocvariable{a} \symbol{92}+ \coqdocvariable{b}),
+which is always \coqdocconstructor{true} in the case of natural numbers.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{cancelNatPCMMixin} := \coqdocvar{CancelPCMMixin} \coqdocvar{cancelNat}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Canonical} \coqdocvar{cancelNatPCM} := \coqdocvar{CancelPCM} \coqdocvar{natPCM} \coqdocvar{cancelNatPCMMixin}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Let us now see the canonical instances in action, so we can prove a
+number of lemmas about natural numbers employing the general PCM
+machinery.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Section} \coqdocvar{PCMExamples}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\label{pg:addnprops} \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Variables} \coqdocvar{a} \coqdocvar{b} \coqdocvar{c}: \coqdocvar{nat}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Goal} \coqdocvar{a} \symbol{92}+ (\coqdocvar{b} \symbol{92}+ \coqdocvar{c}) =  \coqdocvar{c} \symbol{92}+ (\coqdocvar{b} \symbol{92}+ \coqdocvar{a}).\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{rewrite} \coqdocvar{joinA} [\coqdocvar{c} \symbol{92}+ \coqdocvar{\_}]\coqdocvar{joinC} [\coqdocvar{b} \symbol{92}+ \coqdocvar{\_}]\coqdocvar{joinC}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The next goal is proved by using the combined machinery of \coqdocabbreviation{PCM} and
+\coqdocabbreviation{CancelPCM}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Goal} \coqdocvar{c} \symbol{92}+ \coqdocvar{a} = \coqdocvar{a} \symbol{92}+ \coqdocvar{b} \ensuremath{\rightarrow} \coqdocvar{c} = \coqdocvar{b}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{rewrite} [\coqdocvar{c} \symbol{92}+ \coqdocvar{\_}]\coqdocvar{joinC}; \coqdoctac{apply}: \coqdocvar{cancel}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+It might look a bit cumbersome, though, to write the PCM join
+operation \symbol{92}+ instead of the boolean addition when specifying the
+facts about natural numbers (even though they are treated as elements
+of the appropriate PCM). Unfortunately, it is not trivial to encode
+the mechanism, which will perform such conversion implicitly. Even
+though Coq is capable of figuring out what PCM is necessary for a
+particular type (if the necessary canonical instance is defined),
+e.g., when seeing (\coqdocvariable{a} \coqdocvariable{b} : \coqdocinductive{nat}) being used, it infers the \coqdocdefinition{natPCM},
+alas, it's not powerful enough to infer that by writing the
+addition function + on natural numbers, we mean the PCM's
+join. However, if necessary, in most of the cases the conversion like
+this can be done by manual rewriting using the following trivial
+``conversion'' lemma.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{addn\_join} (\coqdocvar{x} \coqdocvar{y}: \coqdocvar{nat}): \coqdocvar{x} + \coqdocvar{y} = \coqdocvar{x} \symbol{92}+ \coqdocvar{y}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}. \coqdoctac{by} []. \coqdockw{Qed}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{End} \coqdocvar{PCMExamples}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\begin{exercise}[Partially ordered sets]
+
+
+\index{partially ordered set}
+
+
+A partially ordered set order is a pair $(T, \pre)$, such that $T$ is
+a set and $\pre$ is a (propositional) relation on $T$, such that
+
+
+
+\begin{enumerate}
+\item $\forall x \in T, x \pre x$ (reflexivity);
+
+\item $\forall x, y \in T, x \pre y \wedge y \pre x \implies x = y$ (antisymmetry);
+
+\item $\forall x, y, z \in T, x \pre y \wedge y \pre z \implies x \pre z$ (transitivity).
+\end{enumerate}
+
+
+
+\noindent
+Implement a data structure for partially-ordered sets using mixins and
+packed classes. Prove the following laws:
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{poset\_refl} (\coqdocvariable{x} : \coqdocvariable{T}) : \coqdocvariable{x} $\pre$ \coqdocvariable{x}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{poset\_asym} (\coqdocvariable{x} \coqdocvariable{y} : \coqdocvariable{T}) : \coqdocvariable{x} $\pre$ \coqdocvariable{y} \ensuremath{\rightarrow} \coqdocvariable{y} $\pre$ \coqdocvariable{x} \ensuremath{\rightarrow} \coqdocvariable{x} = \coqdocvariable{y}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{poset\_trans} (\coqdocvariable{y} \coqdocvariable{x} \coqdocvariable{z} : \coqdocvariable{T}) : \coqdocvariable{x} $\pre$ \coqdocvariable{y} \ensuremath{\rightarrow} \coqdocvariable{y} $\pre$ \coqdocvariable{z} \ensuremath{\rightarrow} \coqdocvariable{x} $\pre$ \coqdocvariable{z}.
+
+\coqdocemptyline
+
+
+\end{exercise}
+
+
+\begin{exercise}[Canonical instances of partially ordered sets]
+
+
+Provide canonical instances of partially ordered sets for the
+following types:
+
+
+
+\begin{itemize}
+\item  \coqdocinductive{nat} with \ensuremath{\le} as a partial order;
+
+\item  \coqdocvar{prod}, whose components are partially-ordered sets;
+
+\item  functions \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvariable{B}, whose codomain (range) \coqdocvariable{B} is a partially
+  ordered set.
+
+\end{itemize}
+
+
+In order to provide a canonical instance for functions, you will need
+to assume and make use of the following axiom of functional
+extensionality:
+
+
+\index{extensionality}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Axiom} \coqdocvar{fext} : \coqdockw{\ensuremath{\forall}} \coqdocvar{A} (\coqdocvar{B} : \coqdocvar{A} \ensuremath{\rightarrow} \coqdockw{Type}) (\coqdocvar{f1} \coqdocvar{f2} : \coqdockw{\ensuremath{\forall}} \coqdocvar{x}, \coqdocvar{B} \coqdocvar{x}), \coqdoceol
+\coqdocindent{7.50em}
+(\coqdockw{\ensuremath{\forall}} \coqdocvar{x}, \coqdocvar{f1} \coqdocvar{x} = \coqdocvar{f2} \coqdocvar{x}) \ensuremath{\rightarrow} \coqdocvar{f1} = \coqdocvar{f2}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\end{exercise}
+
+
+\subsection{Types with decidable equalities}
+
+
+\index{decidable equality}
+
+
+When working with Ssreflect and its libraries, one will always come
+across multiple canonical instances of a particularly important
+dependent record type---a structure with decidable equality. As it has
+been already demonstrated in Section~\ref{sec:eqrefl}, for concrete
+datatypes, which enjoy the decidable boolean equality (==), the
+``switch'' to Coq's propositional equality and back can be done
+seamlessly by means of using the view lemma \coqdocvar{eqP}, leveraging the
+\coqdocvar{reflect} predicate instance of the form \coqdocvar{reflect} (\coqdocvar{b1} = \coqdocvar{b2}) (\coqdocvar{b1} ==
+\coqdocvar{b2}).\ssrd{reflect} Let us now show how the decidable equality is
+defined and instantiated.
+
+
+The module \coqdoclibrary{eqtype}\ssrm{eqtype} of Ssreflect's standard library
+provides a definition of the equality mixin and packaged class of the
+familiar shape, which, after some simplifications, boil to the
+following ones:
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Module} \coqdocvar{Equality}.\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{axiom} \coqdocvariable{T} (\coqdocvar{e} : \coqdocvar{rel} \coqdocvariable{T}) := \coqdockw{\ensuremath{\forall}} \coqdocvariable{x} \coqdocvariable{y}, \coqdocvar{reflect} (\coqdocvariable{x} = \coqdocvariable{y}) (\coqdocvar{e} \coqdocvariable{x} \coqdocvariable{y}).\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdockw{Structure} \coqdocrecord{mixin\_of} \coqdocvariable{T} := \coqdocconstructor{Mixin} \{\coqdocvar{op} : \coqdocvar{rel} \coqdocvariable{T}; \coqdocvar{\_} : \coqdocvar{axiom} \coqdocvar{op}\}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Structure} \coqdockw{type} := \coqdocconstructor{Pack} \{\coqdocvar{sort}; \coqdocvar{\_} : \coqdocrecord{mixin\_of} \coqdocvar{sort}\}.\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+...\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdockw{Notation} \coqdocvar{EqMixin} := \coqdocconstructor{Mixin}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Notation} \coqdocvar{EqType} \coqdocvariable{T} \coqdocvar{m} := \coqdocconstructor{Pack} \coqdocvariable{T} \coqdocvar{m}.\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdockw{End} \coqdocvar{Equality}.
+
+\coqdocemptyline
+
+
+That is, the mixin for equality is a dependent record, whose first
+field is a relation \coqdocvar{op} on a particular carrier type \coqdocvariable{T} (defined
+internally as a function \coqdocvariable{T} \ensuremath{\times} \coqdocvariable{T} \ensuremath{\rightarrow} \coqdocinductive{bool}), and the second argument is
+a proof of the definition \coqdocvar{axiom}, which postulates that the relation
+is in fact equivalent to propositional equality (which is
+established by means of inhabiting the \coqdocvar{reflect} predicate
+instance). Therefore, in order to make a relation \coqdocvar{op} to be a
+decidable equality on \coqdocvariable{T}, one needs to prove that, in fact, it is
+equivalent to the standard, propositional equality.
+
+
+Subsequently, Ssreflect libraries deliver the canonical instances of
+the decidable equality structure to all commonly used concrete
+datatypes. For example, the decidable equality for natural numbers is
+implemented in the \coqdoclibrary{ssrnat}\ssrm{ssrnat} module by the following
+recursive function:\footnote{Coq's \{\coqdockw{struct} \coqdocvar{n}\} annotation
+explicitly specifies, which of the two arguments should be considered
+by the system as a decreasing one, so the recursion would be
+well-founded and \coqdocvar{eqn} would terminate.}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Fixpoint} \coqdocvar{eqn} \coqdocvar{m} \coqdocvar{n} \{\coqdockw{struct} \coqdocvar{m}\} :=\coqdoceol
+\coqdocindent{1.00em}
+\coqdockw{match} \coqdocvar{m}, \coqdocvar{n} \coqdockw{with}\coqdoceol
+\coqdocindent{1.00em}
+\ensuremath{|} 0, 0 \ensuremath{\Rightarrow} \coqdocconstructor{true}\coqdoceol
+\coqdocindent{1.00em}
+\ensuremath{|} \coqdocvar{m'}.+1, \coqdocvar{n'}.+1 \ensuremath{\Rightarrow} \coqdocvar{eqn} \coqdocvar{m'} \coqdocvar{n'}\coqdoceol
+\coqdocindent{1.00em}
+\ensuremath{|} \coqdocvar{\_}, \coqdocvar{\_} \ensuremath{\Rightarrow} \coqdocvar{false}\coqdoceol
+\coqdocindent{1.00em}
+\coqdockw{end}.
+
+\coqdocemptyline
+
+
+\noindent
+The following lemma ensures that \coqdocvar{eqn} correctly reflects the
+propositional equality.
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Lemma} \coqdocvar{eqnP} : \coqdocvar{Equality.axiom} \coqdocvar{eqn}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Proof}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{move}\ensuremath{\Rightarrow} \coqdocvar{n} \coqdocvar{m}; \coqdoctac{apply}: (\coqdocvar{iffP} \coqdocvar{idP}) \ensuremath{\Rightarrow} [ \ensuremath{|} \ensuremath{\leftarrow} ]; \coqdocvar{\texttt{\emph{last}}} \coqdoctac{by} \coqdoctac{elim} \coqdocvar{n}.\coqdoceol
+\coqdocnoindent
+\coqdoctac{by} \coqdoctac{elim}: \coqdocvar{n} \coqdocvar{m} \ensuremath{\Rightarrow} [ \ensuremath{|} \coqdocvar{n} \coqdocvar{IHn}] [| \coqdocvar{m} ] //= /\coqdocvar{IHn} \ensuremath{\rightarrow}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Qed}.
+
+\coqdocemptyline
+\ssrtl{//=}
+
+
+\noindent
+Finally, the following two definitions establish the canonical instance
+of the decidable equality for \coqdocinductive{nat}, which can be used whenever
+\coqdoclibrary{ssrnat} is imported.
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocvar{Canonical} \coqdocvar{nat\_eqMixin} := \coqdocvar{EqMixin} \coqdocvar{eqnP}.\coqdoceol
+\coqdocnoindent
+\coqdocvar{Canonical} \coqdocvar{nat\_eqType} := \coqdocvar{EqType} \coqdocinductive{nat} \coqdocvar{nat\_eqMixin}.
+
+\coqdocemptyline
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\end{coqdoccode}

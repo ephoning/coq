@@ -1,0 +1,114 @@
+\documentclass[pdftex,12pt]{scrbook}
+
+\usepackage[backref=true,
+                     backrefstyle=two,
+                     backend=bibtex,
+                     style=numeric-comp,
+                     maxbibnames=99,
+                     mincrossrefs=99,
+                     sortcites=true
+                     ]{biblatex}
+\usepackage[citecolor=blue]{hyperref}
+\usepackage[]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{float}
+\usepackage{lmodern}
+\usepackage{fullpage}
+\usepackage{coqdoc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{url}
+\usepackage{mathpartir}
+\usepackage{textcomp} 
+\usepackage{color}
+\usepackage{alltt}
+\usepackage{makeidx,hyperref}
+\usepackage{bbm} 
+\usepackage{lipsum} 
+\usepackage{graphicx}
+\usepackage{scrpage2}
+
+% Fancy headers
+\pagestyle{scrheadings}
+\clearscrheadfoot
+\ihead{\headmark}
+\ohead[\pagemark]{\pagemark}
+% Footer spacing
+\setlength{\headsep}{0.35in}  
+\addtolength{\textheight}{0.3in}
+
+% No page number on chapter pages
+\renewcommand{\chapterpagestyle}{empty}
+
+% Figures should be boxed
+%    *** Uncomment the next two lines to box the floats *** 
+\floatstyle{boxed}
+\restylefloat{figure}
+
+% Line spacings
+%\setlength{\parskip}{0.35\baselineskip plus 0.2\baselineskip minus 0.1\baselineskip}
+% \setlength{\parsep}{\parskip}
+% \setlength{\topsep}{7pt}
+% \setlength{\parindent}{0cm}
+
+
+% Keep footnotes on one page
+\interfootnotelinepenalty=10000 
+
+% Specific macros
+\input{defs}
+
+\bibliography{references,proceedings}
+
+\title{Programs and Proofs}
+\subtitle{Mechanizing Mathematics with Dependent Types
+\\
+\vspace{5mm}
+\emph{Lecture Notes}
+}
+
+\author{Ilya Sergey}
+
+\date{{\small{Draft of \today}}
+\vspace{32mm}  
+\begin{center}
+\includegraphics[scale=2.1]{coq-logo.png} 
+\end{center}
+}
+
+\makeindex
+
+\begin{document}
+
+\maketitle
+
+\clearpage
+\phantomsection
+\addcontentsline{toc}{chapter}{Contents}
+\setcounter{page}{1}
+
+\tableofcontents
+
+\include{Introduction.v}
+\include{FunProg.v}
+\include{LogicPrimer.v}
+\include{Rewriting.v}
+\include{BoolReflect.v}
+\include{SsrStyle.v}
+\include{DepRecords.v}
+\include{HTT.v}
+\include{Conclusion.v}
+
+\clearpage
+\phantomsection
+\addcontentsline{toc}{chapter}{Bibliography}
+\printbibliography
+
+\clearpage
+\phantomsection
+\addcontentsline{toc}{chapter}{Index}
+\printindex
+\newpage
+
+
+\end{document}
+ 

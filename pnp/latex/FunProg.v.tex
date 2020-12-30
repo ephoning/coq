@@ -1,0 +1,1630 @@
+\begin{coqdoccode}
+\end{coqdoccode}
+\chapter{Functional Programming in Coq}
+      \label{ch:funprog} 
+
+
+
+Our journey to the land of mechanized reasoning and interactive
+theorem proving starts from observing the capabilities of Coq as a
+programming language.
+
+
+Coq's programming component is often described as a \textit{functional}
+programming language, since its programs are always pure (i.e., not
+producing any sort of side effects), possibly higher-order functions,
+which means that they might take other functions as parameters and
+return functions as results. Similarly to other functional programming
+languages, such as Haskell, OCaml or Scala, Coq makes heavy use of
+algebraic datatypes, represented by a number of possibly recursive
+constructors.  Very soon, we will see how \textit{programming} with inductive
+algebraic datatypes incorporates \textit{reasoning} about them, but for now
+let us take a short tour of Coq's syntax and define a number of simple
+programs.
+
+
+
+
+\section{Enumeration datatypes}
+
+
+
+
+
+Let us create an empty \texttt{.v} file---a standard extension for
+Coq files, recognized, in particular, by Proof General, and define our
+first Coq datatype. The simplest datatype one can imagine is \coqdocinductive{unit}, a
+type inhabited by exactly one element. \ccom{Inductive} In Coq, one
+can define such a type in the following manner:\footnote{Use the
+\texttt{Ctrl-C Ctrl-Enter} keyboard shortcut to initiate the interactive
+\index{interactive proof mode} programming/proof mode in Proof General
+and gradually compile the file.}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocvar{unit} : \coqdockw{Set} := \coqdocvar{tt}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+
+
+The definition above postulates that the type \coqdocinductive{unit} has \textit{exactly} one
+constructor, namely, \coqdocconstructor{tt}. In the type theory jargon, which we will
+adopt, it is said that the expression \coqdocconstructor{tt} \textit{inhabits} the \coqdocinductive{unit}
+type. Naturally, it is the only inhabitant of the set, corresponding
+to the \coqdocinductive{unit} type. We can now check the \coqdocconstructor{tt}'s affiliation via the
+\coqdockw{Check}\ccom{Check} command:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{tt}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocconstructor{tt}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdocinductive{unit}
+
+\coqdocemptyline
+
+
+Moreover, we can make sure that the \coqdocinductive{unit} datatype itself defines a set:
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{unit}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocinductive{unit}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{Set}
+
+\coqdocemptyline
+
+
+In fact, since Coq makes the analogy between sets and types so
+transparent, it is not difficult to define a type describing the
+\textit{empty} set:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocvar{empty} : \coqdockw{Set} := .\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+That is, the empty set is precisely described by the type, values of
+which we simply \textit{cannot construct}, as the type itself does \textit{not}
+provide any constructors!  In fact, this observation about inhabitance
+of types/sets and the definition of an empty type will come in quite
+handy very soon when we will be talking about the truth and falsehood
+in the setting of the Curry-Howard correspondence in
+Chapter~\ref{ch:logic}. Unfortunately, at this moment there is not
+so much we can do with such simple types as \coqdocinductive{unit} or \coqdocinductive{empty}, so we
+proceed by defining some more interesting datatypes.
+
+
+The type \coqdocinductive{bool} is familiar to every programmer. In Coq, it is
+unsurprisingly defined by providing exactly two constructors: \coqdocconstructor{true}
+and \coqdocconstructor{false}. Since \coqdocinductive{bool} is already provided by the standard Coq
+library, we do not need to define it ourselves. Instead, we include
+the following modules into our file using the \coqdockw{From} ... \coqdockw{Require}
+\coqdockw{Import} \ccom{Require Import} \ccom{From} command:\footnote{The
+\textsf{From ...} premise is optional, and in this particular case
+it allows to include libraries from \coqdocvar{mathcomp} without additional qualifiers.}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{From} \coqdocvar{mathcomp}\coqdoceol
+\coqdocnoindent
+\coqdockw{Require} \coqdockw{Import} \coqdocvar{ssreflect} \coqdocvar{ssrbool}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+Now, we can inspect the definition of the \coqdocinductive{bool} type by simply
+printing it: \ccom{Print} 
+
+
+\ssrd{bool}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{bool}.\coqdoceol
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocinductive{bool} : \coqdockw{Set} :=  \coqdocconstructor{true} : \coqdocinductive{bool} \ensuremath{|} \coqdocconstructor{false} : \coqdocinductive{bool}
+
+\coqdocemptyline
+
+
+
+
+Let us now try to define some functions that operate with the bool
+datatype ignoring for a moment the fact that most of them, if not all,
+are already defined in the standard Coq/Ssreflect library.  Our first
+function will simply negate the boolean value and return its opposite:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{negate} \coqdocvar{b} := \coqdoceol
+\coqdocindent{1.00em}
+\coqdockw{match} \coqdocvar{b} \coqdockw{with} \coqdoceol
+\coqdocindent{1.00em}
+\ensuremath{|} \coqdocvar{true}  \ensuremath{\Rightarrow} \coqdocvar{false}\coqdoceol
+\coqdocindent{1.00em}
+\ensuremath{|} \coqdocvar{false} \ensuremath{\Rightarrow} \coqdocvar{true}\coqdoceol
+\coqdocindent{1.00em}
+\coqdockw{end}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The syntax of Coq as programming language is very similar to Standard
+ML. The keyword \coqdockw{Definition} \ccom{Definition} is used to define
+non-recursive values, including functions. In the example above, we
+defined a function with one argument \coqdocvariable{b}, which is being scrutinized
+against two possible value patterns (\coqdocconstructor{true} and \coqdocconstructor{false}),
+respectively, and the corresponding results are returned. Notice that,
+thanks to its very powerful type inference algorithm, Coq didn't
+require us to annotate neither the argument \coqdocvariable{b} with its type, nor the
+function itself with its result type: these types were soundly
+inferred, which might be confirmed by checking the overall type of
+\coqdocdefinition{negate}, stating that it is a function from \coqdocinductive{bool} to \coqdocinductive{bool}:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{negate}.\coqdoceol
+\end{coqdoccode}
+\coqdocdefinition{negate} : \coqdocinductive{bool} \ensuremath{\rightarrow} \coqdocinductive{bool}
+
+
+
+\section{Simple recursive datatypes and programs}
+
+
+
+
+At this point we have seen only very simple forms of inductive types,
+such that all their inhabitants are explicitly enumerated (e.g.,
+\coqdocinductive{unit} and \coqdocinductive{bool}). The next type used ubiquitously in the
+computations and mathematical reasoning are natural numbers, the first
+\textit{truly} inductive datatype. Following the Peano axioms, the type \coqdocinductive{nat}
+of natural numbers is defined by induction, i.e., via the following
+two constructors: 
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{nat}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdockw{Inductive} \coqdocinductive{nat} : \coqdockw{Set} :=  \coqdocvar{O} : \coqdocinductive{nat} \ensuremath{|} \coqdocvar{S} : \coqdocinductive{nat} \ensuremath{\rightarrow} \coqdocinductive{nat}
+
+
+\ssrd{nat}
+
+
+The definition of the type \coqdocinductive{nat} is \textit{recursive}.  It postulates that
+\coqdocvar{O} is a natural number (hence, the first constructor), and, if \coqdocvariable{n} is
+a natural number then \coqdocvar{S} \coqdocvariable{n} is a natural number as well (hence, the
+name \coqdocvar{S}, which is a shortcut for \textit{successor}). At this point, the
+reader can recall the notion of \textit{mathematical induction}, usually
+introduced in school and postulating that if a statement \coqdocvar{P} has to be
+proven to hold over \textit{all} natural numbers, it should be proven to hold
+on zero \textit{and} if it holds for \coqdocvariable{n}, then it should hold for \coqdocvariable{n} +
+1. The very same principle is put into the definition of the natural
+numbers themselves. In the future, we will see many other interesting
+data structures going far beyond natural numbers and each equipped
+with its own \textit{induction principle}.  Moreover, quite soon we will see
+that in Coq recursive definitions/computations and inductive proofs
+are in fact two sides of the same coin.
+
+
+For now, let us write some functions dealing with natural numbers.  In
+order to work conveniently with the elements of type \coqdocinductive{nat}, we will
+import yet another Ssreflect library:
+
+
+\ssrm{ssrnat}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{From} \coqdocvar{mathcomp}\coqdoceol
+\coqdocnoindent
+\coqdockw{Require} \coqdockw{Import} \coqdocvar{ssrnat}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Probably, the most basic function working on natural numbers is their
+addition. Even though such function is already implemented in the vast
+majority of the programming languages (including Coq), let us do it
+from scratch using the definition of \coqdocinductive{nat} from above. Since \coqdocinductive{nat} is
+a recursive type, the addition of two natural numbers \coqdocvariable{n} and \coqdocvariable{m}
+should be defined recursively as well. In Coq, recursive functions are
+defined via the keyword \coqdockw{Fixpoint}. In the following definition of the
+\coqdocdefinition{my\_plus} function, we will make use of Ssreflect's postfix notation
+.+1 (with no spaces between the characters) as an alternative to the
+standard \coqdocinductive{nat}'s recursive constructor \coqdocvar{S}.\footnote{It is important
+to bear in mind that \texttt{.+1} is not just a function for
+incrementation, but also is a datatype constructor, allowing one to
+obtain the Peano successor of a number \texttt{n} by taking
+\texttt{n.+1}.} Also, Coq provides a convenient notation 0 for the
+\textit{zero} constructor \coqdocvar{O}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Fixpoint} \coqdocvar{my\_plus} \coqdocvar{n} \coqdocvar{m} := \coqdoceol
+\coqdocindent{0.50em}
+\coqdockw{match} \coqdocvar{n} \coqdockw{with} \coqdoceol
+\coqdocindent{0.50em}
+\ensuremath{|} 0     \ensuremath{\Rightarrow} \coqdocvar{m}   \coqdoceol
+\coqdocindent{0.50em}
+\ensuremath{|} \coqdocvar{n'}.+1 \ensuremath{\Rightarrow} \coqdockw{let}: \coqdocvar{tmp} := \coqdocvar{my\_plus} \coqdocvar{n'} \coqdocvar{m} \coqdoctac{in} \coqdocvar{tmp}.+1\coqdoceol
+\coqdocindent{0.50em}
+\coqdockw{end}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Here, we deliberately used less concise notation in order to
+demonstrate the syntax \coqdockw{let}: \coqdocvar{x} := \coqdocvar{e1} \coqdoctac{in} \coqdocvar{e2} construct, which,
+similarly to Haskell and OCaml, allows one to bind intermediate
+computations within expressions.\footnote{The same example also
+demonstrates the use of Ssreflect alternative to Coq's standard
+\texttt{let} command, not trailed with a colon. We will be making use
+of Ssreflect's \texttt{let:} consistently, as it provides additional
+benefits with respect to in-place pattern matching, which we will see
+later.} The function \coqdocdefinition{my\_plus} is recursive on its \textit{first}
+argument, which is being decreased in the body, so \coqdocvariable{n'} is a
+\textit{predecessor} of \coqdocvariable{n}, which is passed as an argument to the recursive
+call. We can now check the result of evaluation of \coqdocdefinition{my\_plus} via Coq's
+\coqdockw{Eval} \coqdoctac{compute} \coqdoctac{in} \ccom{Eval} command:\footnote{The command in
+evaluation might look a bit verbose in this form, but it is only
+because of its great flexibility, as it allows for different
+evaluation strategies. In this case we employed \texttt{compute}, as
+it performs all possible reductions.}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Eval} \coqdoctac{compute} \coqdoctac{in} \coqdocvar{my\_plus} 5 7.\coqdoceol
+\end{coqdoccode}
+
+
+  = 12 : \coqdocinductive{nat} 
+
+
+The same function could be written quite a bit shorter via Ssreflect's
+pattern-matching \coqdockw{if}-\coqdockw{is}-notation, which is a convenient alternative
+to pattern matching with only two alternatives:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Fixpoint} \coqdocvar{my\_plus'} \coqdocvar{n} \coqdocvar{m} := \coqdockw{if} \coqdocvar{n} \coqdockw{is} \coqdocvar{n'}.+1 \coqdockw{then} (\coqdocvar{my\_plus'} \coqdocvar{n'} \coqdocvar{m}).+1 \coqdockw{else} \coqdocvar{m}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+At this point, the reader might have an impression that the
+computational language of Coq is the same as of OCaml and Haskell, so
+all usual tricks from the functional programming might be directly
+applicable. Unfortunately, it is not so, and the main difference
+between Coq and other general-purpose programming languages stems from
+the way it treats recursion. For instance, let us try to define the
+following ``buggy'' addition function, which goes into an infinite
+recursion instead of producing the value, due to the fact that the
+recursion argument is not decreasing and remains to be \coqdocvariable{n}:
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Fixpoint} \coqdocvar{my\_plus\_buggy} \coqdocvariable{n} \coqdocvariable{m} := \coqdoceol
+\coqdocindent{2.00em}
+\coqdockw{if} \coqdocvariable{n} \coqdockw{is} \coqdocvariable{n'}.+1 \coqdockw{then} (\coqdocvar{my\_plus\_buggy} \coqdocvariable{n} \coqdocvariable{m}).+1 \coqdockw{else} \coqdocvariable{m}.
+
+\coqdocemptyline
+
+
+we immediately get the following error out of the Coq interpreter:
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocvar{Error}: \coqdocvar{Cannot} \coqdocvar{guess} \coqdocvar{decreasing} \coqdocvar{argument} \coqdockw{of} \coqdockw{fix}.
+
+\coqdocemptyline
+
+
+This is due to the fact that the recursion in \coqdocvar{my\_plus\_buggy} is not
+\textit{primitive}: that is, there is a recursive call, whose argument is not
+``smaller'' comparing to the initial function's arguments \coqdocvariable{n} or \coqdocvariable{m},
+which makes this procedure to fall into a larger class of \textit{generally
+recursive} programs. Unlike primitively-recursive programs,
+generally-recursive programs may not terminate or terminate only on a
+subset of their inputs, and checking termination statically in general
+is an undecidable problem (that is, such checking will not terminate
+by itself, which is known under the name of Turing's \textit{halting
+problem}).\footnote{The computability properties of primitively and
+generally recursive functions is a large topic, which is essentially
+orthogonal to our development, so we omit a detailed discussion on the
+theory of recursion.}\index{halting problem}
+
+
+The check for primitive recursion, which implies termination, is
+performed by Coq \textit{syntactically}, and the system makes sure that there
+is at least one argument of an inductively-defined datatype, which is
+being consistently decreased at each function
+call.\footnote{Sometimes, it is possible to ``help'' Coq to guess
+such argument using the explicit annotation \texttt{struct} right
+after the function parameter list, e.g., \{\coqdockw{struct} \coqdocvariable{n}\} in the case of
+\coqdocdefinition{my\_plus}.} This criteria is sufficient to ensure the termination
+of all functions in Coq. Of course, such termination check is a severe
+restriction to the computational power of Coq, which therefore is not
+Turing-complete as a programming language (as it supports only
+primitive recursion).
+
+
+Although Coq is equipped with an amount of machinery to \textit{reason} about
+potentially non-terminating programs and prove some useful facts about
+them\footnote{Typically, this is done by supplying a user-specific
+termination argument, which "strictly reduces" at each function call,
+or defining a function, so it would take a \emph{co-inductive}
+datatype as its argument.} (for example, Chapter 7 of the
+book~\cite{Chlipala:BOOK} provides a broad overview of methods to
+encode potentially non-terminating programs in Coq and reason about
+them), it usually requires some ingenuity to execute
+generally-recursive computations within Coq. Fortunately, even without
+the possibility to \textit{execute} any possible program in the system, Coq
+provides a rich tool-set to \textit{encode} such programs, so a number of
+statements could be proved about them (as we will see in
+Chapter~\ref{ch:htt}), and the encoded programs themselves could be
+later \textit{extracted} into a general-purpose language, such as Haskell or
+OCaml in order to be executed (see~\cite[Chapter
+10]{Bertot-Casteran:BOOK} for detailed description of the
+extraction).
+
+
+So, why is ensuring termination in Coq so important? The reason for
+this will be better understood once we introduce the way Coq works
+with logical statements and propositions. For now, it should be enough
+to accept the fact that in order to ensure the logical calculus
+underlying Coq sound, the results of all functions in it (even
+operating with infinite values, e.g., streams defined co-inductively)
+should be computable in a finite number of steps. A bit further we
+will see that the proofs of propositions in Coq are just ordinary
+values in its computational language, and the construction of the
+proofs naturally should terminate, hence computation of \textit{any} value in
+Coq should terminate, since each value can be involved into a proof of
+some statement.
+
+
+Postponing the discussion on the nature of propositions and proofs in
+Coq, we will continue our overview of programming principles in Coq.
+
+
+With the example of the addition function, we have already seen how
+the recursive functions are defined. However, using the \coqdockw{Fixpoint}
+command is not the only way to provide definitions to functions
+similar to \coqdocdefinition{my\_plus}. When defining the types \coqdocinductive{unit} or \coqdocinductive{empty}, we
+could have noticed the following output produced by the interactive
+interpreter:
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocinductive{unit} \coqdockw{is} \coqdocvar{defined}\coqdoceol
+\coqdocnoindent
+\coqdocvar{unit\_rect} \coqdockw{is} \coqdocvar{defined}\coqdoceol
+\coqdocnoindent
+\coqdocvar{unit\_ind} \coqdockw{is} \coqdocvar{defined}\coqdoceol
+\coqdocnoindent
+\coqdocvar{unit\_rec} \coqdockw{is} \coqdocvar{defined}
+
+\coqdocemptyline
+These three lines indicate that along with the new datatype (\coqdocinductive{unit} in
+this case) three additional entities have been generated by the
+system. These are the companion \textit{induction} and \textit{recursion}
+principles, which are named using the simple convention basing on the
+name of the datatype. For example, the \coqdocinductive{nat} datatype comes
+accompanied by \coqdocdefinition{nat\_rect}, \coqdocvar{nat\_ind} and \coqdocdefinition{nat\_rec}, correspondingly.
+
+
+Continuing playing with natural numbers and leaving the \coqdocdefinition{nat\_rect} and
+\coqdocvar{nat\_ind} aside for a moment, we focus on the recursion primitive
+\coqdocdefinition{nat\_rec}, which is a \textit{higher-order} function with the following type:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{nat\_rec}.\coqdoceol
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{nat\_rec} : \coqdockw{\ensuremath{\forall}} \coqdocvar{P} : \coqdocinductive{nat} \ensuremath{\rightarrow} \coqdockw{Set},\coqdoceol
+\coqdocindent{5.00em}
+\coqdocvar{P} 0 \ensuremath{\rightarrow} (\coqdockw{\ensuremath{\forall}} \coqdocvariable{n} : \coqdocinductive{nat}, \coqdocvar{P} \coqdocvariable{n} \ensuremath{\rightarrow} \coqdocvar{P} \coqdocvariable{n}.+1) \ensuremath{\rightarrow} \coqdockw{\ensuremath{\forall}} \coqdocvariable{n} : \coqdocinductive{nat}, \coqdocvar{P} \coqdocvariable{n}
+
+\coqdocemptyline
+
+
+The type of \coqdocdefinition{nat\_rec} requires a bit of explanation. It is
+polymorphic in the sense of Haskell and OCaml (i.e., it is
+parametrized over another type). More precisely, its first parameter,
+bound by the \coqdockw{\ensuremath{\forall}} quantifier is a function, which maps natural
+numbers to types (hence the type of this parameter is \coqdocinductive{nat} \ensuremath{\rightarrow}
+\coqdockw{Set}). The second parameter is a result of type described by
+application of the function \coqdocvar{P} to zero. The third parameter is a
+\textit{family} of functions, indexed by a natural number \coqdocvariable{n}. Each function
+from such a family takes an argument of type \coqdocvar{P} \coqdocvariable{n} and returns a
+result of type \coqdocvar{P} \coqdocvariable{n}.+1. The default recursion
+principle\index{recursion principle} for natural numbers is
+therefore a higher-order function (i.e., a combinator). If the three
+\index{combinator} discussed arguments are provided, the result of
+\coqdocdefinition{nat\_rec} will be a function, mapping a natural number \coqdocvariable{n} to a value
+of type \coqdocvar{P} \coqdocvariable{n}.
+
+
+To see how \coqdocdefinition{nat\_rec} is implemented, let us explore its generalized
+version, \coqdocdefinition{nat\_rect}:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{nat\_rect}.\coqdoceol
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{nat\_rect} = \coqdoceol
+\coqdocindent{0.50em}
+\coqdockw{fun} (\coqdocvar{P} : \coqdocinductive{nat} \ensuremath{\rightarrow} \coqdockw{Type}) (\coqdocvar{f} : \coqdocvar{P} 0) (\coqdocvar{f0} : \coqdockw{\ensuremath{\forall}} \coqdocvariable{n} : \coqdocinductive{nat}, \coqdocvar{P} \coqdocvariable{n} \ensuremath{\rightarrow} \coqdocvar{P} \coqdocvariable{n}.+1) \ensuremath{\Rightarrow}\coqdoceol
+\coqdocindent{0.50em}
+\coqdockw{fix} \coqdocvar{F} (\coqdocvariable{n} : \coqdocinductive{nat}) : \coqdocvar{P} \coqdocvariable{n} :=\coqdoceol
+\coqdocindent{1.50em}
+\coqdockw{match} \coqdocvariable{n} \coqdockw{as} \coqdocvar{n0} \coqdockw{return} (\coqdocvar{P} \coqdocvar{n0}) \coqdockw{with}\coqdoceol
+\coqdocindent{1.50em}
+\ensuremath{|} 0 \ensuremath{\Rightarrow} \coqdocvar{f}\coqdoceol
+\coqdocindent{1.50em}
+\ensuremath{|} \coqdocvar{n0}.+1 \ensuremath{\Rightarrow} \coqdocvar{f0} \coqdocvar{n0} (\coqdocvar{F} \coqdocvar{n0})\coqdoceol
+\coqdocindent{1.50em}
+\coqdockw{end}\coqdoceol
+\coqdocindent{3.00em}
+: \coqdockw{\ensuremath{\forall}} \coqdocvar{P} : \coqdocinductive{nat} \ensuremath{\rightarrow} \coqdockw{Type},\coqdoceol
+\coqdocindent{4.00em}
+\coqdocvar{P} 0 \ensuremath{\rightarrow} (\coqdockw{\ensuremath{\forall}} \coqdocvariable{n} : \coqdocinductive{nat}, \coqdocvar{P} \coqdocvariable{n} \ensuremath{\rightarrow} \coqdocvar{P} \coqdocvariable{n}.+1) \ensuremath{\rightarrow} \coqdockw{\ensuremath{\forall}} \coqdocvariable{n} : \coqdocinductive{nat}, \coqdocvar{P} \coqdocvariable{n}
+
+\coqdocemptyline
+
+
+Abstracting away from the details, we can see that \coqdocdefinition{nat\_rect} is
+indeed a function with three parameters (the keyword \coqdockw{fun} is similar
+to the lambda notation and is common in the family of ML-like
+languages).  The body of \coqdocdefinition{nat\_rect} is implemented as a recursive
+function (defined via the keyword \coqdockw{fix}) taking an argument \coqdocvariable{n} of
+type \coqdocinductive{nat}. Internally, it proceeds similarly to our implementation of
+\coqdocdefinition{my\_plus}: if the argument \coqdocvariable{n} is zero, then the ``default'' value \coqdocvar{f}
+of type \coqdocvar{P} 0 is returned. Otherwise, the function proceeds
+recursively with a smaller argument \coqdocvar{n0} by applying the ``step''
+function \coqdocvar{f0} to the \coqdocvar{n0} and the result of recursive call \coqdocvar{F} \coqdocvar{n0}.
+
+
+Therefore, the summing function can be implemented via the \coqdocinductive{nat}'s
+recursion combinator as follows:
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{my\_plus'{}'} \coqdocvar{n} \coqdocvar{m} := \coqdocvar{nat\_rec} (\coqdockw{fun} \coqdocvar{\_} \ensuremath{\Rightarrow} \coqdocvar{nat}) \coqdocvar{m} (\coqdockw{fun} \coqdocvar{n'} \coqdocvar{m'} \ensuremath{\Rightarrow} \coqdocvar{m'}.+1) \coqdocvar{n}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Eval} \coqdoctac{compute} \coqdoctac{in} \coqdocvar{my\_plus'{}'} 16 12.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+    = 28 : (\coqdockw{fun} \coqdocvar{\_} : \coqdocinductive{nat} \ensuremath{\Rightarrow} \coqdocinductive{nat}) 16
+
+
+The result of invoking \coqdocdefinition{my\_plus'{}'} is expectable. Notice, however, that
+when defining it we didn't have to use the keyword \coqdockw{Fixpoint} (or,
+equivalently, \coqdockw{fix}), since all recursion has been ``sealed'' within the
+definition of the combinator \coqdocdefinition{nat\_rect}.
+
+
+\subsection{Dependent function types and pattern matching}
+
+
+
+
+\index{dependent pattern matching}
+An important thing to notice is the fact that the type of \coqdocvar{P} in the
+definition of \coqdocdefinition{nat\_rec} is a function that maps \textit{values} of type \coqdocinductive{nat}
+into arbitrary types. This gives us a possibility to define
+\textit{dependently-typed} functions, whose return type depends on their
+input argument value. A simple example of such a function is below:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{nat\_rec}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{sum\_no\_zero} \coqdocvar{n} := \coqdoceol
+\coqdocindent{0.50em}
+\coqdockw{let}: \coqdocvar{P} := (\coqdockw{fun} \coqdocvar{n} \ensuremath{\Rightarrow} \coqdockw{if} \coqdocvar{n} \coqdockw{is} 0 \coqdockw{then} \coqdocvar{unit} \coqdockw{else} \coqdocvar{nat}) \coqdoctac{in}\coqdoceol
+\coqdocindent{0.50em}
+\coqdocvar{nat\_rec} \coqdocvar{P} \coqdocvar{tt} (\coqdockw{fun} \coqdocvar{n'} \coqdocvar{m} \ensuremath{\Rightarrow} \coqdoceol
+\coqdocindent{0.50em}
+\coqdockw{match} \coqdocvar{n'} \coqdockw{return} \coqdocvar{P} \coqdocvar{n'} \ensuremath{\rightarrow} \coqdocvar{\_} \coqdockw{with}\coqdoceol
+\coqdocindent{0.50em}
+\ensuremath{|} 0 \ensuremath{\Rightarrow} \coqdockw{fun} \coqdocvar{\_} \ensuremath{\Rightarrow} 1\coqdoceol
+\coqdocindent{0.50em}
+\ensuremath{|} \coqdocvar{n'{}'}.+1 \ensuremath{\Rightarrow} \coqdockw{fun} \coqdocvar{m} \ensuremath{\Rightarrow} \coqdocvar{my\_plus} \coqdocvar{m} (\coqdocvar{n'}.+1) \coqdoceol
+\coqdocindent{0.50em}
+\coqdockw{end} \coqdocvar{m}) \coqdocvar{n}.\coqdoceol
+\coqdocemptyline
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Eval} \coqdoctac{compute} \coqdoctac{in} \coqdocvar{sum\_no\_zero} 0.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+ 
+     = \coqdocconstructor{tt}
+     : (\coqdockw{fun} \coqdocvariable{n} : \coqdocinductive{nat} \ensuremath{\Rightarrow} \coqdockw{match} \coqdocvariable{n} \coqdockw{with}
+                       \ensuremath{|} 0 \ensuremath{\Rightarrow} \coqdocinductive{unit}
+                       \ensuremath{|} \coqdocvar{\_}.+1 \ensuremath{\Rightarrow} \coqdocinductive{nat}
+                       \coqdockw{end}) 0
+
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Eval} \coqdoctac{compute} \coqdoctac{in} \coqdocvar{sum\_no\_zero} 5.\coqdoceol
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{2.50em}
+= 15\coqdoceol
+\coqdocindent{2.50em}
+: (\coqdockw{fun} \coqdocvariable{n} : \coqdocinductive{nat} \ensuremath{\Rightarrow} \coqdockw{match} \coqdocvariable{n} \coqdockw{with}\coqdoceol
+\coqdocindent{11.50em}
+\ensuremath{|} 0 \ensuremath{\Rightarrow} \coqdocinductive{unit}\coqdoceol
+\coqdocindent{11.50em}
+\ensuremath{|} \coqdocvar{\_}.+1 \ensuremath{\Rightarrow} \coqdocinductive{nat}\coqdoceol
+\coqdocindent{11.50em}
+\coqdockw{end}) 5
+
+\coqdocemptyline
+
+
+The toy function \coqdocdefinition{sum\_no\_zero} maps every natural number \coqdocvariable{n} to a sum
+of numbers 1 ... \coqdocvariable{n}, except for 0, which is being mapped into the
+value \coqdocconstructor{tt} of type \coqdocinductive{unit}. We define it via the \coqdocdefinition{nat\_rec} combinator
+by providing it a function \coqdocvar{P}, which defines the type contract
+described just above.  Importantly, as the first parameter to
+\coqdocdefinition{nat\_rec}, we pass a type-level function \coqdocvar{P}, which maps 0 to the
+\coqdocinductive{unit} type and all other values to the type \coqdocinductive{nat}. The ``step''
+function, which is a third parameter, of this \coqdocdefinition{nat\_rec} call, makes
+use of the \textit{dependent} pattern matching, which now explicitly
+\textit{refines} the return type \coqdocvar{P} \coqdocvariable{n'} \ensuremath{\rightarrow} \coqdocvar{\_} of the whole \coqdockw{match} \coqdocvariable{e} \coqdockw{with} \coqdocvar{ps}
+\coqdockw{end} expression. This small addition allows the Coq type checker to
+relate the expected type of \coqdocdefinition{my\_plus}' first argument in the second
+branch to the type of the pattern matching scrutinee \coqdocvariable{n'}. Without
+the explicit \coqdockw{return} in the pattern matching, in some cases when its
+result type depends on the value of the scrutinee, the Coq type
+checking engine will fail to unify the type of the branch and the
+overall type. In particular, had we omitted the \coqdockw{return} clauses in
+the pattern matching, we would get the following type-checking error,
+indicating that Coq cannot infer that the type of \coqdocdefinition{my\_plus}' argument
+is always \coqdocinductive{nat}, so it complains:
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{sum\_no\_zero'} \coqdocvariable{n} := \coqdoceol
+\coqdocindent{0.50em}
+\coqdockw{let}: \coqdocvar{P} := (\coqdockw{fun} \coqdocvariable{n} \ensuremath{\Rightarrow} \coqdockw{if} \coqdocvariable{n} \coqdockw{is} 0 \coqdockw{then} \coqdocinductive{unit} \coqdockw{else} \coqdocinductive{nat}) \coqdoctac{in}\coqdoceol
+\coqdocindent{0.50em}
+\coqdocdefinition{nat\_rec} \coqdocvar{P} \coqdocconstructor{tt} (\coqdockw{fun} \coqdocvariable{n'} \coqdocvariable{m} \ensuremath{\Rightarrow} \coqdoceol
+\coqdocnoindent
+\coqdockw{match} \coqdocvariable{n'} \coqdockw{with}\coqdoceol
+\coqdocindent{1.50em}
+\ensuremath{|} 0 \ensuremath{\Rightarrow} \coqdockw{fun} \coqdocvar{\_} \ensuremath{\Rightarrow} 1\coqdoceol
+\coqdocindent{1.50em}
+\ensuremath{|} \coqdocvar{n'{}'}.+1 \ensuremath{\Rightarrow} \coqdockw{fun} \coqdocvariable{m} \ensuremath{\Rightarrow} \coqdocdefinition{my\_plus} \coqdocvariable{m} (\coqdocvariable{n'}.+1) \coqdoceol
+\coqdocnoindent
+\coqdockw{end} \coqdocvariable{m}) \coqdocvariable{n}.
+
+\coqdocemptyline
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocvar{Error}:\coqdoceol
+\coqdocnoindent
+\coqdocvar{In} \coqdocvar{environment}\coqdoceol
+\coqdocnoindent
+\coqdocvariable{n} : ?37\coqdoceol
+\coqdocnoindent
+\coqdocvar{P} := \coqdockw{fun} \coqdocvariable{n} : \coqdocinductive{nat} \ensuremath{\Rightarrow} \coqdockw{match} \coqdocvariable{n} \coqdockw{with}\coqdoceol
+\coqdocindent{10.00em}
+\ensuremath{|} 0 \ensuremath{\Rightarrow} \coqdocinductive{unit}\coqdoceol
+\coqdocindent{10.00em}
+\ensuremath{|} \coqdocvar{\_}.+1 \ensuremath{\Rightarrow} \coqdocinductive{nat}\coqdoceol
+\coqdocindent{10.00em}
+\coqdockw{end} : \coqdocinductive{nat} \ensuremath{\rightarrow} \coqdockw{Set}\coqdoceol
+\coqdocnoindent
+\coqdocvariable{n'} : \coqdocinductive{nat}\coqdoceol
+\coqdocnoindent
+\coqdocvariable{m} : \coqdocvar{P} \coqdocvariable{n'}\coqdoceol
+\coqdocnoindent
+\coqdocvar{The} \coqdocvar{term} "m" \coqdocvar{has} \coqdockw{type} "P n'" \coqdocvar{while} \coqdocvar{it} \coqdockw{is} \coqdocvar{expected} \coqdocvar{to} \coqdocvar{have} \coqdockw{type} "nat".
+
+\coqdocemptyline
+
+
+In general, dependent pattern matching is a quite powerful tool,
+which, however, should be used with a great caution, as it makes
+assisting the Coq type checker a rather non-trivial task. In the vast
+majority of the cases dependent pattern matching can be avoided. We
+address the curious reader to the Chapter 8 of the
+book~\cite{Chlipala:BOOK} for more examples on the subject.
+
+
+\index{dependent function type} Dependent function types, akin to
+those of \coqdocdefinition{nat\_rec} and our \coqdocdefinition{sum\_no\_zero}, which allow the type of the
+result to vary depending on the value of a function's argument, are a
+powerful way to \textit{specify the behaviour} of functions, and therefore,
+are often used to ``enforce'' the dependently-typed programs to work in
+a particular expected way. In Coq, dependent function types are
+omnipresent, and are syntactically specified using the
+\coqdockw{\ensuremath{\forall}}-binder, similarly to the way \textit{parametric} types are specified
+in Haskell or typed calculi like polymorphic lambda calculus (also
+known as System
+$F$~\cite{Reynolds:SP74,Girard:PhD}).\footnote{Although, generally
+speaking, Coq abuses the $\forall$-notation using it for what is
+denoted in other typed calculi by means of quantifiers $\Lambda$ (terms
+parametrized by types), $\forall$ (types parametrized by types) and
+$\Pi$ (types parametrized by terms)~\cite{Pierce:BOOK02}.} The
+crucial difference between Coq's core calculus and System $F$ is that
+in Coq the types can be parametrised not just by \textit{types} but also by
+\textit{values}. While the utility of this language ``feature'' can be already
+demonstrated for constructing and type-checking \textit{programs} (for
+example, \coqdocdefinition{sum\_no\_zero}), its true strength is best demonstrated when
+using Coq as a system to construct \textit{proofs}, which is the topic of the
+subsequent chapters.
+
+
+\subsection{Recursion principle and non-inhabited types}
+
+
+
+
+Automatically-generated recursion principles for inductively-defined
+datatypes provide a generic (although not universal) scheme to define
+recursive functions for the corresponding values. But what if a type
+is not inhabited, i.e., there are no values in it? We have already
+seen such a type---it's \coqdocinductive{empty}, which corresponds to the empty
+set. As any inductive datatype in Coq, it comes with an automatically
+generated generalized recursion principle, so let us check its type:
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{empty\_rect}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{empty\_rect}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} (\coqdocvar{P} : \coqdocinductive{empty} \ensuremath{\rightarrow} \coqdockw{Type}) (\coqdocvariable{e} : \coqdocinductive{empty}), \coqdocvar{P} \coqdocvariable{e}
+
+\coqdocemptyline
+
+
+Very curiously, the type signature of \coqdocdefinition{empty\_rect} postulates that it
+is sufficient to provide a function from \coqdocinductive{empty} to any type (which
+can very well be just a constant type, e.g., \coqdocinductive{nat}), and an argument
+\coqdocvariable{e} of type \coqdocinductive{empty}, so the result of the call to \coqdocdefinition{empty\_rect} will be
+of type \coqdocvar{P} \coqdocvariable{e}. More concisely, \coqdocdefinition{empty\_rect} allows us to produce a
+result of \textit{any} type, given that we can provide an argument of type
+\coqdocinductive{empty}. While it might sound very surprising at the first moment,
+upon some reflection it seems like a perfectly valid principle, since
+we will \textit{never} be able to construct the required value of type
+\coqdocinductive{empty} in the first place. In more fancy words, such recursion
+principle can be reformulated as the following postulate:
+
+
+
+\begin{center}
+
+Assuming existence of a value, which \emph{cannot be constructed},\\
+we will be able to construct \emph{anything}.
+
+\end{center}
+
+
+
+This is a very important insight, which will become illuminating when
+we will be discussing the reasoning with negation in the next chapter.
+
+
+To conclude this section, we only mention that defining a datatype
+with no constructors is not the only way to get a type, which is not
+inhabited. For example, the following type
+\coqdocinductive{strange}~\cite{Bertot-Casteran:BOOK} has a constructor, which,
+however, can never be invoked, as it requires a value of it type
+itself in order to return a value: \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocvar{strange} : \coqdockw{Set} :=  \coqdocvar{cs} : \coqdocvar{strange} \ensuremath{\rightarrow} \coqdocvar{strange}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Therefore, an attempt to create a value of type \coqdocinductive{strange} by invoking
+its single constructor will inevitably lead to an infinite,
+non-terminating, series of constructor calls, and such programs cannot
+be encoded in Coq. It is interesting to take a look at the recursion
+principle of \coqdocinductive{strange}:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{strange\_rect}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{strange\_rect}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{\ensuremath{\forall}} \coqdocvar{P} : \coqdocinductive{strange} \ensuremath{\rightarrow} \coqdockw{Type},\coqdoceol
+\coqdocindent{3.50em}
+(\coqdockw{\ensuremath{\forall}} \coqdocvariable{s} : \coqdocinductive{strange}, \coqdocvar{P} \coqdocvariable{s} \ensuremath{\rightarrow} \coqdocvar{P} (\coqdocconstructor{cs} \coqdocvariable{s})) \ensuremath{\rightarrow} \coqdockw{\ensuremath{\forall}} \coqdocvariable{s} : \coqdocinductive{strange}, \coqdocvar{P} \coqdocvariable{s}
+
+\coqdocemptyline
+
+
+That is, if we pose the argument \coqdocvar{P} to be a constant type function
+\coqdockw{fun} \coqdocvar{\_} \ensuremath{\Rightarrow} \coqdocinductive{empty}, and the second argument to be just an identity
+function (\coqdockw{fun} \coqdocvar{\_} \coqdocvar{x} \ensuremath{\Rightarrow} \coqdocvar{x}) that maps its second argument to itself, we
+will get a function that, upon receiving argument of type \coqdocinductive{strange}
+will construct an argument of type \coqdocinductive{empty}! More precisely, the
+existence of a value of type \coqdocinductive{strange} would allow us to create a
+value of type \coqdocinductive{empty} and, therefore a value of \textit{any} type, as was
+previously demonstrated. The following definition of the function
+\coqdocdefinition{strange\_to\_empty} substantiates this observation:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{strange\_to\_empty} (\coqdocvar{s}: \coqdocvar{strange}): \coqdocvar{empty} :=\coqdoceol
+\coqdocindent{1.00em}
+\coqdocvar{strange\_rect} (\coqdockw{fun} \coqdocvar{\_} \ensuremath{\Rightarrow} \coqdocvar{empty}) (\coqdockw{fun} \coqdocvar{\_} \coqdocvar{e} \ensuremath{\Rightarrow} \coqdocvar{e}) \coqdocvar{s}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+To summarize, designing a datatype, which is not inhabited, while not
+trivial, is not impossible, and it is a task of a designer of a
+particular type to make sure that its values in fact can be
+constructed.
+
+
+
+
+\section{More datatypes}
+
+
+
+
+While programming with natural numbers is fun, it is time for us to
+take a brief look at other datatypes familiar from functional
+programming, as they appear in Coq.
+
+
+The type of pairs is parametrized by two arbitrary types \coqdocvariable{A} and
+\coqdocvariable{B} (by now let us think of its sort \coqdockw{Type} as a generalization of
+\coqdockw{Set}, which we have seen before). As in Haskell
+or OCaml, \coqdocinductive{prod} can also be seen as a type-level constructor with two
+parameters that can be possibly curried:
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{prod}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocinductive{prod} : \coqdockw{Type} \ensuremath{\rightarrow} \coqdockw{Type} \ensuremath{\rightarrow} \coqdockw{Type}
+
+\coqdocemptyline
+
+
+\ssrd{prod}
+
+
+Pairs in Coq are defined as a higher-order datatype \coqdocinductive{prod} with just
+one constructor:
+
+
+\begin{coqdoccode}
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{prod}.\coqdoceol
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocinductive{prod} (\coqdocvariable{A} \coqdocvariable{B} : \coqdockw{Type}) : \coqdockw{Type} :=  \coqdocconstructor{pair} : \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvariable{B} \ensuremath{\rightarrow} \coqdocvariable{A} \ensuremath{\times} \coqdocvariable{B}\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdocvar{For} \coqdocconstructor{pair}: \coqdocvar{Arguments} \coqdocvariable{A}, \coqdocvariable{B} \coqdocvar{are} \coqdocvar{implicit} \coqdocvar{and} \coqdocvar{maximally} \coqdocvar{inserted}\coqdoceol
+\coqdocnoindent
+\coqdocvar{For} \coqdocinductive{prod}: \coqdocvar{Argument} \coqdocvar{scopes} \coqdocvar{are} [\coqdocvar{type\_scope} \coqdocvar{type\_scope}]\coqdoceol
+\coqdocnoindent
+\coqdocvar{For} \coqdocconstructor{pair}: \coqdocvar{Argument} \coqdocvar{scopes} \coqdocvar{are} [\coqdocvar{type\_scope} \coqdocvar{type\_scope} \coqdocvar{\_} \coqdocvar{\_}]
+
+\coqdocemptyline
+
+
+The display above, besides showing how \coqdocinductive{prod} is defined, specifies
+that the type arguments of \coqdocinductive{prod} are \textit{implicit}, in the sense that
+they will be inferred by the type-checker when enough information is
+provided, e.g., the arguments of the constructor \coqdocconstructor{pair} are
+instantiated with particular values. For instance, type arguments can
+be omitted in the following expression: \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{pair} 1 \coqdocvar{tt}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+(1, \coqdocconstructor{tt}) : \coqdocinductive{nat} \ensuremath{\times} \coqdocinductive{unit}
+
+\coqdocemptyline
+
+
+If one wants to explicitly specify the type arguments of a
+constructor, the @-prefixed notation can be used:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} @\coqdocvar{pair} \coqdocvar{nat} \coqdocvar{unit} 1 \coqdocvar{tt}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+(1, \coqdocconstructor{tt}) : \coqdocinductive{nat} \ensuremath{\times} \coqdocinductive{unit}
+
+\coqdocemptyline
+
+
+Notice that the parameters of the datatype come first in the order
+they are declared, followed by the arguments of the constructor.
+
+
+The last two lines following the definition of \coqdocinductive{prod} specify that the
+notation for pairs is overloaded (in particular, the ``\coqdocvar{\_} \ensuremath{\times} \coqdocvar{\_}''
+notation is also used by Coq to denote the multiplication of natural
+numbers), so it is given a specific \textit{interpretation scope}. That is,
+when the expression \coqdocinductive{nat} \ensuremath{\times} \coqdocinductive{unit} will appear in the type position, it
+will be interpreted as a type \coqdocconstructor{pair} \coqdocinductive{nat} \coqdocinductive{unit} rather than like an
+(erroneous) attempt to ``multiply'' two types as if they were integers.
+
+
+Coq comes with a number of functions for manipulating datatypes, such
+as pair. For instance, the first and second components of a pair:
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{fst}.\coqdoceol
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{fst} : \coqdockw{\ensuremath{\forall}} \coqdocvariable{A} \coqdocvariable{B} : \coqdockw{Type}, \coqdocvariable{A} \ensuremath{\times} \coqdocvariable{B} \ensuremath{\rightarrow} \coqdocvariable{A}
+
+\coqdocemptyline
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{snd}.\coqdoceol
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{snd} : \coqdockw{\ensuremath{\forall}} \coqdocvariable{A} \coqdocvariable{B} : \coqdockw{Type}, \coqdocvariable{A} \ensuremath{\times} \coqdocvariable{B} \ensuremath{\rightarrow} \coqdocvariable{B}
+
+\coqdocemptyline
+
+
+Curiously, the notation ``\coqdocvar{\_} \ensuremath{\times} \coqdocvar{\_}'' is not hard-coded into Coq, but
+rather is defined as a lightweight syntactic sugar on top of standard
+Coq syntax. Very soon we will see how one can easily extend Coq's
+syntax by defining their own notations. We will also see how is it
+possible to find what a particular notation means.
+
+
+The arsenal of a functional programmer in Coq would be incomplete
+without proper sum and list datatypes:\footnote{In Ssreflect's
+enhanced library lists are paraphrased as the \coqdoclibrary{seq}  datatype, which
+is imported from the module \coqdoclibrary{seq}.} 
+
+
+\ssrd{sum}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{sum}.\coqdoceol
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocinductive{sum} (\coqdocvariable{A} \coqdocvariable{B} : \coqdockw{Type}) : \coqdockw{Type} :=  \coqdocvar{inl} : \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvariable{A} + \coqdocvariable{B} \ensuremath{|} \coqdocvar{inr} : \coqdocvariable{B} \ensuremath{\rightarrow} \coqdocvariable{A} + \coqdocvariable{B}
+
+\coqdocemptyline
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{From} \coqdocvar{mathcomp}\coqdoceol
+\coqdocnoindent
+\coqdockw{Require} \coqdockw{Import} \coqdocvar{seq}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{seq}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Notation} \coqdoclibrary{seq} := \coqdocinductive{list}
+
+\coqdocemptyline
+
+
+\ssrd{list}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{list}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocinductive{list} (\coqdocvariable{A} : \coqdockw{Type}) : \coqdockw{Type} := \coqdocvar{nil} : \coqdocinductive{list} \coqdocvariable{A} \ensuremath{|} \coqdocvar{cons} : \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocinductive{list} \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocinductive{list} \coqdocvariable{A}
+
+\coqdocemptyline
+
+
+\begin{exercise}[Fun with lists in Coq]
+
+
+Implement the recursive function \coqdocdefinition{alternate} of type \coqdoclibrary{seq} \coqdocinductive{nat} \ensuremath{\rightarrow} \coqdoclibrary{seq}
+\coqdocinductive{nat} \ensuremath{\rightarrow} \coqdoclibrary{seq} \coqdocinductive{nat}, so it would construct the alternation of two
+sequences according to the following ``test cases''.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Eval} \coqdoctac{compute} \coqdoctac{in} \coqdocvar{alternate} [:: 1;2;3] [:: 4;5;6].\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{2.50em}
+= [:: 1; 4; 2; 5; 3; 6]\coqdoceol
+\coqdocindent{2.50em}
+: \coqdoclibrary{seq} \coqdocinductive{nat}
+
+\coqdocemptyline
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Eval} \coqdoctac{compute} \coqdoctac{in} \coqdocvar{alternate} [:: 1] [:: 4;5;6].\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{2.50em}
+= [:: 1; 4; 5; 6]\coqdoceol
+\coqdocindent{2.50em}
+: \coqdoclibrary{seq} \coqdocinductive{nat}
+
+\coqdocemptyline
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Eval} \coqdoctac{compute} \coqdoctac{in} \coqdocvar{alternate} [:: 1;2;3] [:: 4].\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocindent{2.50em}
+= [:: 1; 4; 2; 3]\coqdoceol
+\coqdocindent{2.50em}
+: \coqdoclibrary{seq} \coqdocinductive{nat}
+
+\coqdocemptyline
+
+
+\hint The reason why the ``obvious'' elegant solution might fail is
+ that the argument is not strictly decreasing.
+
+
+\end{exercise}
+
+
+
+
+\section{Searching for definitions and notations}
+
+
+
+
+Of course, we could keep enumerating datatypes and operations on them
+from the standard Coq/Ssreflect library (which is quite large), but
+it's always better for a starting Coq hacker to have a way to find
+necessary definitions on her own. Fortunately, Coq provides a very
+powerful search tool, whose capabilities are greatly amplified by
+Ssreflect. Its use is better demonstrated by examples.\ccom{Search}
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Search} "filt".\coqdoceol
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocvar{List.filter}  \coqdockw{\ensuremath{\forall}} \coqdocvariable{A} : \coqdockw{Type}, (\coqdocvariable{A} \ensuremath{\rightarrow} \coqdocinductive{bool}) \ensuremath{\rightarrow} \coqdocinductive{list} \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocinductive{list} \coqdocvariable{A}\coqdoceol
+\coqdocnoindent
+\coqdocvar{List.filter\_In}\coqdoceol
+\coqdocindent{1.50em}
+\coqdockw{\ensuremath{\forall}} (\coqdocvariable{A} : \coqdockw{Type}) (\coqdocvar{f} : \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocinductive{bool}) (\coqdocvar{x} : \coqdocvariable{A}) (\coqdocvar{l} : \coqdocinductive{list} \coqdocvariable{A}),\coqdoceol
+\coqdocindent{1.50em}
+\coqdocvar{List.In} \coqdocvar{x} (\coqdocvar{List.filter} \coqdocvar{f} \coqdocvar{l}) \ensuremath{\leftrightarrow} \coqdocvar{List.In} \coqdocvar{x} \coqdocvar{l} \ensuremath{\land} \coqdocvar{f} \coqdocvar{x} = \coqdocconstructor{true}
+
+\coqdocemptyline
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Search} "filt" (\coqdocvar{\_} \ensuremath{\rightarrow} \coqdocvar{list} \coqdocvar{\_}).\coqdoceol
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocvar{List.filter}  \coqdockw{\ensuremath{\forall}} \coqdocvariable{A} : \coqdockw{Type}, (\coqdocvariable{A} \ensuremath{\rightarrow} \coqdocinductive{bool}) \ensuremath{\rightarrow} \coqdocinductive{list} \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocinductive{list} \coqdocvariable{A}
+
+\coqdocemptyline
+
+
+That is, the first \coqdockw{Search} query just takes a string and looks for
+definitions of functions and propositions that have it as a part of
+their name. The second pattern elaborates the first by adding a
+requirement that the type of the function should include (\coqdocvar{\_} \ensuremath{\rightarrow} \coqdocinductive{list}
+\coqdocvar{\_}) as a part of its return type, which narrows the search scope. As usual the
+underscores \coqdocvar{\_} denote a wildcard in the pattern and can be used both
+in the name or type component. Moreover, one can use named patterns of
+the form ?\coqdocvar{id} to bind free identifiers in the sub-types of a sought
+expression. For instance, the next query will list all functions with
+map-like types (notice how the higher-order constructor types are
+abstracted over using wildcards):
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Search} \coqdocvar{\_} ((?\coqdocvar{X} \ensuremath{\rightarrow} ?\coqdocvar{Y}) \ensuremath{\rightarrow} \coqdocvar{\_} ?\coqdocvar{X} \ensuremath{\rightarrow} \coqdocvar{\_} ?\coqdocvar{Y}).\coqdoceol
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocvar{option\_map}  \coqdockw{\ensuremath{\forall}} \coqdocvariable{A} \coqdocvariable{B} : \coqdockw{Type}, (\coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvariable{B}) \ensuremath{\rightarrow} \coqdocvar{option} \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvar{option} \coqdocvariable{B}\coqdoceol
+\coqdocnoindent
+\coqdocvar{List.map}  \coqdockw{\ensuremath{\forall}} \coqdocvariable{A} \coqdocvariable{B} : \coqdockw{Type}, (\coqdocvariable{A} \ensuremath{\rightarrow} \coqdocvariable{B}) \ensuremath{\rightarrow} \coqdocinductive{list} \coqdocvariable{A} \ensuremath{\rightarrow} \coqdocinductive{list} \coqdocvariable{B}\coqdoceol
+\coqdocnoindent
+...
+
+\coqdocemptyline
+
+
+If necessary, the type patterns in the query can have their types
+explicitly specified in order to avoid ambiguities due to notation
+overloading. For instance, the following search will return all
+functions and propositions that make use of the \coqdocvar{\_} \ensuremath{\times} \coqdocvar{\_} notation and
+operate with natural numbers: \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Search} \coqdocvar{\_} (\coqdocvar{\_} \ensuremath{\times} \coqdocvar{\_} : \coqdocvar{nat}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+In contrast, the next query will only list the functions/propositions,
+where \coqdocvar{\_} \ensuremath{\times} \coqdocvar{\_} is treated as a notation for the pair datatype
+(including \coqdocdefinition{fst} and \coqdocdefinition{snd}, which we have already seen):
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Search} \coqdocvar{\_} (\coqdocvar{\_} \ensuremath{\times} \coqdocvar{\_}: \coqdockw{Type}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+A detailed explanation of the syntax of \coqdockw{Search} tool as well as
+additional examples can be found in Chapter 10 of Ssreflect
+documentation~\cite{Gontier-al:TR}.
+
+
+When working with someone's Coq development, sometimes it might be not
+entirely obvious what particular notation means: Coq's extensible
+parser is very simple to abuse by defining completely intractable
+abbreviations, which might say a lot to the library developer, but not
+to its client. Coq provides the \texttt{Locate} \ccom{Locate}
+command to help in demystifying notations as well as locating the
+position of particular definitions.  For example, the following query
+will show all the definitions of the notation ``\coqdocvar{\_} + \coqdocvar{\_}'' as well as the
+scopes they defined in.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Locate} "\_ + \_".\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Notation}            \coqdockw{Scope}     \coqdoceol
+\coqdocnoindent
+"x + y" := \coqdocinductive{sum} \coqdocvar{x} \coqdocvar{y}   : \coqdocvar{type\_scope}\coqdoceol
+\coqdocindent{11.00em}
+\coqdoceol
+\coqdocnoindent
+"m + n" := \coqdocvar{addn} \coqdocvariable{m} \coqdocvariable{n}  : \coqdocvar{nat\_scope}
+
+\coqdocemptyline
+
+
+We can see now that the plus-notation is used in particular for the
+addition of natural numbers (in \coqdocvar{nat\_scope}) and the declaration of a
+sum type (in \coqdocvar{type\_scope}). Similarly to the notations, the
+\texttt{Locate} command can help finding the definition in the
+source modules they defined:\footnote{The module system of Coq is
+similar to OCaml and will be discussed further in this chapter.} \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Locate} \coqdocvar{map}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocvar{Constant} \coqdocvar{Coq.Lists.List.map}\coqdoceol
+\coqdocindent{1.00em}
+(\coqdocvar{shorter} \coqdocvar{name} \coqdocvar{to} \coqdocvar{refer} \coqdocvar{to} \coqdocvar{it} \coqdoctac{in} \coqdocvar{current} \coqdockw{context} \coqdockw{is} \coqdocvar{List.map})\coqdoceol
+\coqdocnoindent
+\coqdocvar{Constant} \coqdocvar{Ssreflect.ssrfun.Option.map}\coqdoceol
+\coqdocindent{1.00em}
+(\coqdocvar{shorter} \coqdocvar{name} \coqdocvar{to} \coqdocvar{refer} \coqdocvar{to} \coqdocvar{it} \coqdoctac{in} \coqdocvar{current} \coqdockw{context} \coqdockw{is} \coqdocvar{ssrfun.Option.map})\coqdoceol
+\coqdocnoindent
+...
+
+\coqdocemptyline
+
+
+\section{An alternative syntax to define inductive datatypes}
+
+
+
+
+In the previous sections of this chapter we have already seen the way
+inductive datatypes are defined in the setting ``traditional''
+Coq. These are the definitions that will be displayed when using the
+\coqdockw{Print} utility. However, in the rest of the development in this book,
+we will be using a version of Coq, enhanced with the Ssreflect tool,
+which, in particular, provides more concise notation for defining
+constructors. For instance, as an alternative to the standard
+definition of the product datatype, we can define our own product in
+the following way:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Inductive} \coqdocvar{my\_prod} (\coqdocvar{A} \coqdocvar{B} : \coqdockw{Type}) : \coqdockw{Type} :=  \coqdocvar{my\_pair} \coqdockw{of} \coqdocvar{A} \& \coqdocvar{B}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Notice that \coqdocvariable{A} and \coqdocvariable{B} are type parameters of the whole datatype as
+well as of its single constructor \coqdocconstructor{my\_pair}, which \textit{additionally}
+required two value arguments, \textit{whose} types are \coqdocvariable{A} and \coqdocvariable{B},
+respectively. 
+
+
+Next, let us try to create a value of type \coqdocinductive{my\_prod} \coqdocinductive{nat} \coqdocinductive{unit} and
+check its type.  
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocconstructor{my\_pair} 1 \coqdocconstructor{tt}.\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdocvar{Error}: \coqdocvar{The} \coqdocvar{term} "1" \coqdocvar{has} \coqdockw{type} "nat" \coqdocvar{while} \coqdocvar{it} \coqdockw{is} \coqdocvar{expected} \coqdocvar{to} \coqdocvar{have} \coqdockw{type} "Type".
+
+\coqdocemptyline
+
+
+The error message is caused by the fact that the constructor has
+expected the type parameters to be provided \textit{explicitly} first, so the
+value above should in fact have been created by calling \coqdocconstructor{my\_pair} \coqdocinductive{nat}
+\coqdocinductive{unit} 1 \coqdocconstructor{tt}. Since mentioning types every time is tedious, we can now
+take advantage of Coq's elaboration algorithm, which is capable to
+infer them from the values of actual arguments (e.g., 1 and \coqdocconstructor{tt}),
+and declare \coqdocconstructor{my\_pair}'s type arguments as implicit:
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdocvar{Arguments} \coqdocvar{my\_pair} [\coqdocvar{A} \coqdocvar{B}].\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+We have already witnessed standard Coq's datatypes making use of
+specific user-defined notations. Let us define such notation for the
+type \coqdocinductive{my\_prod} and its \coqdocconstructor{my\_pair} constructor.
+ \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Notation} "X ** Y" := (\coqdocvar{my\_prod} \coqdocvar{X} \coqdocvar{Y}) (\coqdoctac{at} \coqdockw{level} 2).\coqdoceol
+\coqdocnoindent
+\coqdockw{Notation} "( X ,, Y )" := (\coqdocvar{my\_pair} \coqdocvar{X} \coqdocvar{Y}).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The \coqdockw{level} part in the first notation definition is mandatory for
+potentially left-recursive notations, which is the case here, in order
+to set up parsing priorities with respect to other notations.
+
+
+With these freshly defined notations we are now free to write the
+following expressions:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} (1 ,, 3).\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+(1,, 3)\coqdoceol
+\coqdocindent{2.50em}
+: \coqdocinductive{nat} ** \coqdocinductive{nat}
+
+\coqdocemptyline
+
+
+\begin{coqdoccode}
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{nat} ** \coqdocvar{unit} ** \coqdocvar{nat}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+(\coqdocinductive{nat} ** \coqdocinductive{unit}) ** \coqdocinductive{nat}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdockw{Set}
+
+\coqdocemptyline
+
+
+Notice that the notation ``\coqdocvar{\_} ** \coqdocvar{\_}'' for \coqdocconstructor{my\_pair} by default is set to
+be left-associative. The other associativity should be declared
+explicitly, and we address the reader to the Chapter 12 of Coq
+manual~\cite{Coq-manual} for the details of the \coqdockw{Notation}
+\ccom{Notation} command syntax.
+
+
+\section{Sections and modules}
+
+
+\label{sec:secmod}
+
+
+We conclude this chapter by a very brief overview of Coq's module
+system.\index{sections}\index{modules}
+
+
+Sections are the simplest way to structure the programs in Coq. In
+particular, sections allow the programmer to limit the scope of
+modules imported to the current file (each compiled \texttt{.v} file
+in the scope of the interpreter is considered as a module), as well as
+to defined \textit{locally-scoped} variables. To see how it works, let us
+construct a section containing a utility function for natural
+numbers.  Declaring a section starts from the keyword
+\coqdockw{Section},\ccom{Section} followed by the name of the section:
+
+
+ \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Section} \coqdocvar{NatUtilSection}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+We now define a \textit{variable} \coqdocvariable{n} of type \coqdocvariable{n}, whose scope is lexically
+limited by the section \coqdocsection{NatUtilSection} (including its internal
+sections). One can think of variables declared this way as of\ccom{Variable}
+unspecified values, which we assume to be available outside of the
+section.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Variable} \coqdocvar{n}: \coqdocvar{nat}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+We can now define a function, implementing multiplication of natural
+numbers by means of addition. To do this, we assume the variable \coqdocvariable{n}
+to be fixed, so the multiplication can be formulated just as a
+function of \textit{one} parameter:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Fixpoint} \coqdocvar{my\_mult} \coqdocvar{m} := \coqdockw{match} (\coqdocvar{n}, \coqdocvar{m}) \coqdockw{with}\coqdoceol
+\coqdocindent{0.50em}
+\ensuremath{|} (0, \coqdocvar{\_}) \ensuremath{\Rightarrow} 0\coqdoceol
+\coqdocindent{0.50em}
+\ensuremath{|} (\coqdocvar{\_}, 0) \ensuremath{\Rightarrow} 0\coqdoceol
+\coqdocindent{0.50em}
+\ensuremath{|} (\coqdocvar{\_}, \coqdocvar{m'}.+1) \ensuremath{\Rightarrow} \coqdocvar{my\_plus} (\coqdocvar{my\_mult} \coqdocvar{m'}) \coqdocvar{n}\coqdoceol
+\coqdocindent{0.50em}
+\coqdockw{end}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+We now close the section by using the \coqdockw{End} \ccom{End} keyword.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{End} \coqdocvar{NatUtilSection}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+Unlike Haskell or Java's modules, sections in Coq are transparent:
+their internal definitions are visible outside of their bodies, and
+the definitions' names need not be qualified. The same \textit{does not}
+apply to sections' variables. Instead, they become \textit{parameters} of
+definitions they happened to be used in. This can be seen by printing
+the implementation of \coqdocdefinition{my\_mult} outside of the section
+\coqdocsection{NatUtilSection}.
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Print} \coqdocvar{my\_mult}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{my\_mult} = \coqdoceol
+\coqdocnoindent
+\coqdockw{fun} \coqdocvariable{n} : \coqdocinductive{nat} \ensuremath{\Rightarrow}\coqdoceol
+\coqdocnoindent
+\coqdockw{fix} \coqdocdefinition{my\_mult} (\coqdocvariable{m} : \coqdocinductive{nat}) : \coqdocinductive{nat} :=\coqdoceol
+\coqdocindent{1.00em}
+\coqdockw{let} (\coqdocvar{n0}, \coqdocvar{y}) := (\coqdocvariable{n}, \coqdocvariable{m}) \coqdoctac{in}\coqdoceol
+\coqdocindent{1.00em}
+\coqdockw{match} \coqdocvar{n0} \coqdockw{with}\coqdoceol
+\coqdocindent{1.00em}
+\ensuremath{|} 0 \ensuremath{\Rightarrow} 0\coqdoceol
+\coqdocindent{1.00em}
+\ensuremath{|} \coqdocvar{\_}.+1 \ensuremath{\Rightarrow} \coqdockw{match} \coqdocvar{y} \coqdockw{with}\coqdoceol
+\coqdocindent{6.00em}
+\ensuremath{|} 0 \ensuremath{\Rightarrow} 0\coqdoceol
+\coqdocindent{6.00em}
+\ensuremath{|} \coqdocvariable{m'}.+1 \ensuremath{\Rightarrow} \coqdocdefinition{my\_plus} (\coqdocdefinition{my\_mult} \coqdocvariable{m'}) \coqdocvariable{n}\coqdoceol
+\coqdocindent{6.00em}
+\coqdockw{end}\coqdoceol
+\coqdocindent{1.00em}
+\coqdockw{end}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdocinductive{nat} \ensuremath{\rightarrow} \coqdocinductive{nat} \ensuremath{\rightarrow} \coqdocinductive{nat}
+
+\coqdocemptyline
+
+
+We can see now that the variable \coqdocvariable{n} became an actual parameter of
+\coqdocdefinition{my\_mult}, so the function now takes \textit{two} parameters, just as
+expected.
+
+
+An alternative to sections in Coq, which provides better
+encapsulation, are \textit{modules}. A module, \ccom{Module} similarly to a
+section, can contain locally-declared variables, sections and modules
+(but not modules within sections!). However, the internals of a module
+are not implicitly exposed to the outside, instead they should be
+either referred to by \textit{qualified} names or exported explicitly by
+means of putting them into a submodule and via the command
+\coqdockw{Export}\ccom{Export}, just as demonstrated below:
+
+
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Module} \coqdocvar{NatUtilModule}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Fixpoint} \coqdocvar{my\_fact} \coqdocvar{n} :=\coqdoceol
+\coqdocindent{1.00em}
+\coqdockw{if} \coqdocvar{n} \coqdockw{is} \coqdocvar{n'}.+1 \coqdockw{then} \coqdocvar{my\_mult} \coqdocvar{n} (\coqdocvar{my\_fact} \coqdocvar{n'}) \coqdockw{else} 1.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Module} \coqdocvar{Exports}.\coqdoceol
+\coqdocnoindent
+\coqdockw{Definition} \coqdocvar{fact} := \coqdocvar{my\_fact}.\coqdoceol
+\coqdocnoindent
+\coqdockw{End} \coqdocvar{Exports}.\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{End} \coqdocvar{NatUtilModule}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+The submodule \textsc{Exports} creates a synonym \coqdocdefinition{fact} for the
+function \coqdocdefinition{my\_fact}, defined outside of it. The following command
+explicitly exports all internals of the module
+\textsc{NatUtilModule.Exports}, therefore making \coqdocdefinition{fact} visible
+outside of \coqdocmodule{NatUtilModule}.
+
+
+ \begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Export} \coqdocvar{NatUtilModule.Exports}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+
+
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocdefinition{my\_fact}.\coqdoceol
+\coqdocnoindent
+\coqdoceol
+\coqdocnoindent
+\coqdocvar{Error}: \coqdocvar{The} \coqdocvar{reference} \coqdocdefinition{my\_fact} \coqdocvar{was} \coqdocvar{not} \coqdocvar{found} \coqdoctac{in} \coqdocvar{the} \coqdocvar{current} \coqdocvar{environment}.
+
+\coqdocemptyline
+\begin{coqdoccode}
+\coqdocemptyline
+\coqdocnoindent
+\coqdockw{Check} \coqdocvar{fact}.\coqdoceol
+\coqdocemptyline
+\end{coqdoccode}
+\coqdoceol
+\coqdocemptyline
+\coqdocnoindent
+\coqdocdefinition{fact}\coqdoceol
+\coqdocindent{2.50em}
+: \coqdocinductive{nat} \ensuremath{\rightarrow} \coqdocinductive{nat}
+
+\coqdocemptyline
+\begin{coqdoccode}
+\end{coqdoccode}
